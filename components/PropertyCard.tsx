@@ -60,6 +60,7 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
     office: Colors.categoryOffice,
     hostel: Colors.categoryHostel,
     room: Colors.categoryRoom,
+    hotel: Colors.categoryHotel,
   };
 
   if (compact) {

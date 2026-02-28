@@ -22,6 +22,7 @@ const Colors = {
   categoryOffice: '#8B5CF6',
   categoryHostel: '#EC4899',
   categoryRoom: '#F97316',
+  categoryHotel: '#14B8A6',
   light: {
     text: '#1A1A2E',
     background: '#F7F5F2',

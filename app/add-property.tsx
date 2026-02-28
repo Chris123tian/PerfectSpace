@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platfo
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, Camera } from 'lucide-react-native';
+import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, Camera, ConciergeBell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
@@ -11,11 +11,39 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { PropertyType, ListingType, Property } from '@/types/property';
 
+interface CurrencyOption {
+  country: string;
+  code: string;
+  symbol: string;
+}
+
+const currencyOptions: CurrencyOption[] = [
+  { country: 'United States', code: 'USD', symbol: '$' },
+  { country: 'United Kingdom', code: 'GBP', symbol: '£' },
+  { country: 'European Union', code: 'EUR', symbol: '€' },
+  { country: 'Canada', code: 'CAD', symbol: 'CA$' },
+  { country: 'Australia', code: 'AUD', symbol: 'A$' },
+  { country: 'Nigeria', code: 'NGN', symbol: '₦' },
+  { country: 'South Africa', code: 'ZAR', symbol: 'R' },
+  { country: 'Kenya', code: 'KES', symbol: 'KSh' },
+  { country: 'Ghana', code: 'GHS', symbol: 'GH₵' },
+  { country: 'India', code: 'INR', symbol: '₹' },
+  { country: 'Japan', code: 'JPY', symbol: '¥' },
+  { country: 'China', code: 'CNY', symbol: '¥' },
+  { country: 'Brazil', code: 'BRL', symbol: 'R$' },
+  { country: 'Mexico', code: 'MXN', symbol: 'MX$' },
+  { country: 'UAE', code: 'AED', symbol: 'د.إ' },
+  { country: 'Saudi Arabia', code: 'SAR', symbol: '﷼' },
+  { country: 'Egypt', code: 'EGP', symbol: 'E£' },
+  { country: 'Tanzania', code: 'TZS', symbol: 'TSh' },
+];
+
 const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }[] = [
   { key: 'apartment', label: 'Apartment', icon: <Building2 size={20} color={Colors.categoryApartment} /> },
   { key: 'office', label: 'Office', icon: <Building2 size={20} color={Colors.categoryOffice} /> },
   { key: 'hostel', label: 'Hostel', icon: <Hotel size={20} color={Colors.categoryHostel} /> },
   { key: 'room', label: 'Room', icon: <DoorOpen size={20} color={Colors.categoryRoom} /> },
+  { key: 'hotel', label: 'Hotel', icon: <ConciergeBell size={20} color={Colors.categoryHotel} /> },
 ];
 
 const fallbackImages: Record<PropertyType, string[]> = {
@@ -39,6 +67,11 @@ const fallbackImages: Record<PropertyType, string[]> = {
     'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800',
     'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800',
   ],
+  hotel: [
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+    'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800',
+    'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800',
+  ],
 };
 
 export default function AddPropertyScreen() {
@@ -56,6 +89,8 @@ export default function AddPropertyScreen() {
   const [address, setAddress] = useState<string>('');
   const [city, setCity] = useState<string>('');
   const [amenities, setAmenities] = useState<string>('');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption>(currencyOptions[0]);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
   const [images, setImages] = useState<string[]>([]);
 
   const pickImage = useCallback(async () => {
@@ -152,7 +187,7 @@ export default function AddPropertyScreen() {
         type,
         listingType,
         price: parseFloat(price) || 0,
-        currency: '$',
+        currency: selectedCurrency.symbol,
         period: listingType === 'rent' ? '/mo' : undefined,
         bedrooms: parseInt(bedrooms) || 0,
         bathrooms: parseInt(bathrooms) || 1,
@@ -186,7 +221,7 @@ export default function AddPropertyScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty]);
+  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency]);
 
   return (
     <View style={styles.container}>
@@ -271,8 +306,44 @@ export default function AddPropertyScreen() {
           <Text style={styles.inputLabel}>Description *</Text>
           <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} placeholder="Describe your property..." placeholderTextColor={Colors.textLight} multiline numberOfLines={4} textAlignVertical="top" testID="property-description" />
 
-          <Text style={styles.inputLabel}>Price ($) *</Text>
-          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? 'Monthly rent' : 'Sale price'} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
+          <Text style={styles.inputLabel}>Currency & Price *</Text>
+          <Pressable
+            style={styles.currencySelector}
+            onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
+            testID="currency-selector"
+          >
+            <Text style={styles.currencyFlag}>{selectedCurrency.symbol}</Text>
+            <Text style={styles.currencyLabel}>{selectedCurrency.country} ({selectedCurrency.code})</Text>
+            <Text style={styles.currencyArrow}>{showCurrencyPicker ? '\u25B2' : '\u25BC'}</Text>
+          </Pressable>
+          {showCurrencyPicker && (
+            <View style={styles.currencyDropdown}>
+              <ScrollView nestedScrollEnabled style={styles.currencyScrollList} showsVerticalScrollIndicator={true}>
+                {currencyOptions.map((opt: CurrencyOption) => (
+                  <Pressable
+                    key={opt.code}
+                    style={[
+                      styles.currencyOption,
+                      selectedCurrency.code === opt.code && styles.currencyOptionActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedCurrency(opt);
+                      setShowCurrencyPicker(false);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Text style={[
+                      styles.currencyOptionText,
+                      selectedCurrency.code === opt.code && styles.currencyOptionTextActive,
+                    ]}>
+                      {opt.symbol}  {opt.country} ({opt.code})
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? `Monthly rent in ${selectedCurrency.code}` : `Sale price in ${selectedCurrency.code}`} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
@@ -342,8 +413,8 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   pillText: { fontSize: 15, fontWeight: '600' as const, color: Colors.textSecondary },
   pillTextActive: { color: Colors.white },
-  typeRow: { flexDirection: 'row', gap: 8 },
-  typeCard: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border, gap: 6 },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  typeCard: { width: '30%', flexGrow: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border, gap: 6 },
   typeCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   typeLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary },
   typeLabelActive: { color: Colors.primary },
@@ -352,6 +423,16 @@ const styles = StyleSheet.create({
   textArea: { height: 100, textAlignVertical: 'top' as const },
   row: { flexDirection: 'row', gap: 12 },
   halfInput: { flex: 1 },
+  currencySelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: Colors.border, gap: 10, marginBottom: 8 },
+  currencyFlag: { fontSize: 18, fontWeight: '700' as const, color: Colors.primary },
+  currencyLabel: { flex: 1, fontSize: 15, color: Colors.text, fontWeight: '500' as const },
+  currencyArrow: { fontSize: 12, color: Colors.textSecondary },
+  currencyDropdown: { backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, marginBottom: 8, overflow: 'hidden' },
+  currencyScrollList: { maxHeight: 200 },
+  currencyOption: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  currencyOptionActive: { backgroundColor: Colors.primaryLight },
+  currencyOptionText: { fontSize: 14, color: Colors.text },
+  currencyOptionTextActive: { color: Colors.primary, fontWeight: '600' as const },
   bottomSpacer: { height: 40 },
   bottomBar: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingHorizontal: 20, paddingTop: 12 },
   submitBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },

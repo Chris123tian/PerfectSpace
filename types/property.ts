@@ -1,4 +1,4 @@
-export type PropertyType = 'apartment' | 'office' | 'hostel' | 'room';
+export type PropertyType = 'apartment' | 'office' | 'hostel' | 'room' | 'hotel';
 export type ListingType = 'rent' | 'sale';
 export type UserRole = 'renter' | 'landlord' | 'admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';

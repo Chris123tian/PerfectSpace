@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,13 @@ import {
   FlatList,
   Animated,
   Platform,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus } from 'lucide-react-native';
+import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -27,7 +30,12 @@ const categories: { key: PropertyType | 'all'; label: string; icon: React.ReactN
   { key: 'office', label: 'Offices', icon: <Building2 size={20} color={Colors.white} />, color: Colors.categoryOffice },
   { key: 'hostel', label: 'Hostels', icon: <Hotel size={20} color={Colors.white} />, color: Colors.categoryHostel },
   { key: 'room', label: 'Rooms', icon: <DoorOpen size={20} color={Colors.white} />, color: Colors.categoryRoom },
+  { key: 'hotel', label: 'Hotels', icon: <ConciergeBell size={20} color={Colors.white} />, color: Colors.categoryHotel },
 ];
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SLIDE_WIDTH = SCREEN_WIDTH - 40;
+const SLIDE_SPACING = 12;
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -35,6 +43,9 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [activeFeaturedIndex, setActiveFeaturedIndex] = useState<number>(0);
+  const featuredScrollRef = useRef<FlatList>(null);
+  const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleCategoryPress = useCallback((key: PropertyType | 'all') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -59,6 +70,52 @@ export default function HomeScreen() {
   }, [selectedCategory, searchQuery, activeProperties]);
 
   const featuredProperties = useMemo(() => activeProperties.filter(p => p.featured), [activeProperties]);
+
+  useEffect(() => {
+    if (featuredProperties.length <= 1) return;
+    autoScrollTimer.current = setInterval(() => {
+      setActiveFeaturedIndex(prev => {
+        const next = (prev + 1) % featuredProperties.length;
+        featuredScrollRef.current?.scrollToOffset({
+          offset: next * (SLIDE_WIDTH + SLIDE_SPACING),
+          animated: true,
+        });
+        return next;
+      });
+    }, 4000);
+    return () => {
+      if (autoScrollTimer.current) clearInterval(autoScrollTimer.current);
+    };
+  }, [featuredProperties.length]);
+
+  const handleFeaturedScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / (SLIDE_WIDTH + SLIDE_SPACING));
+    setActiveFeaturedIndex(index);
+  }, []);
+
+  const handleFeaturedTouchStart = useCallback(() => {
+    if (autoScrollTimer.current) clearInterval(autoScrollTimer.current);
+  }, []);
+
+  const handleFeaturedTouchEnd = useCallback(() => {
+    if (featuredProperties.length <= 1) return;
+    autoScrollTimer.current = setInterval(() => {
+      setActiveFeaturedIndex(prev => {
+        const next = (prev + 1) % featuredProperties.length;
+        featuredScrollRef.current?.scrollToOffset({
+          offset: next * (SLIDE_WIDTH + SLIDE_SPACING),
+          animated: true,
+        });
+        return next;
+      });
+    }, 4000);
+  }, [featuredProperties.length]);
+
+  const formatFeaturedPrice = useCallback((price: number, currency: string, period?: string) => {
+    const formatted = price >= 1000000 ? `${(price / 1000000).toFixed(1)}M` : price.toLocaleString();
+    return `${currency}${formatted}${period ?? ''}`;
+  }, []);
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 80],
@@ -179,18 +236,79 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Featured</Text>
-              <Pressable style={styles.seeAllButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
-                <Text style={styles.seeAllText}>See all</Text>
-                <ChevronRight size={16} color={Colors.primary} />
-              </Pressable>
+              <View style={styles.slideDots}>
+                {featuredProperties.map((_, idx) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.slideDot,
+                      activeFeaturedIndex === idx && styles.slideDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
             <FlatList
+              ref={featuredScrollRef}
               horizontal
+              pagingEnabled={false}
+              snapToInterval={SLIDE_WIDTH + SLIDE_SPACING}
+              snapToAlignment="start"
+              decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
               data={featuredProperties}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.featuredList}
-              renderItem={({ item }) => <PropertyCard property={item} compact />}
+              onMomentumScrollEnd={handleFeaturedScroll}
+              onTouchStart={handleFeaturedTouchStart}
+              onTouchEnd={handleFeaturedTouchEnd}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.featuredSlide}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push(`/property/${item.id}`);
+                  }}
+                  testID={`featured-slide-${item.id}`}
+                >
+                  <Image
+                    source={{ uri: item.images[0] }}
+                    style={styles.featuredSlideImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                  <View style={styles.featuredSlideOverlay} />
+                  <View style={styles.featuredSlideContent}>
+                    <View style={styles.featuredSlideBadgeRow}>
+                      <View style={styles.featuredStarBadge}>
+                        <Star size={10} color={Colors.accent} fill={Colors.accent} />
+                        <Text style={styles.featuredStarText}>Featured</Text>
+                      </View>
+                      <View style={styles.featuredTypeBadge}>
+                        <Text style={styles.featuredTypeText}>
+                          {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.featuredSlideBottom}>
+                      <Text style={styles.featuredSlideTitle} numberOfLines={1}>{item.title}</Text>
+                      <View style={styles.featuredSlideLocation}>
+                        <MapPin size={12} color="rgba(255,255,255,0.8)" />
+                        <Text style={styles.featuredSlideCity} numberOfLines={1}>{item.city}</Text>
+                      </View>
+                      <View style={styles.featuredSlidePriceRow}>
+                        <Text style={styles.featuredSlidePrice}>
+                          {formatFeaturedPrice(item.price, item.currency, item.period)}
+                        </Text>
+                        <View style={styles.featuredSlideRating}>
+                          <Star size={12} color={Colors.accent} fill={Colors.accent} />
+                          <Text style={styles.featuredSlideRatingText}>{item.rating}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              )}
             />
           </View>
         )}
@@ -256,10 +374,29 @@ const styles = StyleSheet.create({
   section: { paddingTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 14 },
   sectionTitle: { fontSize: 20, fontWeight: '700' as const, color: Colors.text },
-  seeAllButton: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  seeAllText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
+
   countText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const },
-  featuredList: { paddingHorizontal: 20 },
+  featuredList: { paddingHorizontal: 20, gap: SLIDE_SPACING },
+  featuredSlide: { width: SLIDE_WIDTH, height: 200, borderRadius: 18, overflow: 'hidden', position: 'relative' as const },
+  featuredSlideImage: { width: '100%', height: '100%' },
+  featuredSlideOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 18 },
+  featuredSlideContent: { ...StyleSheet.absoluteFillObject, padding: 16, justifyContent: 'space-between' },
+  featuredSlideBadgeRow: { flexDirection: 'row', gap: 8 },
+  featuredStarBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.95)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  featuredStarText: { fontSize: 11, fontWeight: '700' as const, color: Colors.accent },
+  featuredTypeBadge: { backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  featuredTypeText: { fontSize: 11, fontWeight: '600' as const, color: Colors.white },
+  featuredSlideBottom: { gap: 4 },
+  featuredSlideTitle: { fontSize: 20, fontWeight: '800' as const, color: Colors.white, letterSpacing: -0.3 },
+  featuredSlideLocation: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  featuredSlideCity: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500' as const },
+  featuredSlidePriceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  featuredSlidePrice: { fontSize: 20, fontWeight: '800' as const, color: Colors.white },
+  featuredSlideRating: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+  featuredSlideRatingText: { fontSize: 13, fontWeight: '700' as const, color: Colors.white },
+  slideDots: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  slideDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.border },
+  slideDotActive: { backgroundColor: Colors.primary, width: 20 },
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '600' as const, color: Colors.text, marginTop: 16 },
   emptySubtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 8, textAlign: 'center' },

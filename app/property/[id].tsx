@@ -175,6 +175,7 @@ export default function PropertyDetailScreen() {
   const typeColors: Record<string, string> = {
     apartment: Colors.categoryApartment, office: Colors.categoryOffice,
     hostel: Colors.categoryHostel, room: Colors.categoryRoom,
+    hotel: Colors.categoryHotel,
   };
 
   return (

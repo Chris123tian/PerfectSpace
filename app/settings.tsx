@@ -54,21 +54,6 @@ export default function SettingsScreen() {
     }
   }, [currentPassword, newPassword, confirmPassword, user?.password, updateProfile]);
 
-  const handleClearData = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert('Clear All Data', 'This will reset the entire app. Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear Data', style: 'destructive',
-        onPress: async () => {
-          await AsyncStorage.clear();
-          logout();
-          router.replace('/login');
-        },
-      },
-    ]);
-  }, [logout]);
-
   const handleDeleteAccount = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data will be lost.', [
@@ -221,16 +206,8 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.sectionTitle}>Data</Text>
+        <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>
-          <Pressable style={styles.settingRow} onPress={handleClearData}>
-            <View style={styles.settingLeft}>
-              <View style={[styles.iconBg, { backgroundColor: Colors.warning + '15' }]}><Trash2 size={18} color={Colors.warning} /></View>
-              <Text style={styles.settingLabel}>Clear App Data</Text>
-            </View>
-            <ChevronRight size={18} color={Colors.textLight} />
-          </Pressable>
-          <View style={styles.divider} />
           <Pressable style={styles.settingRow} onPress={handleDeleteAccount}>
             <View style={styles.settingLeft}>
               <View style={[styles.iconBg, { backgroundColor: Colors.error + '15' }]}><Trash2 size={18} color={Colors.error} /></View>

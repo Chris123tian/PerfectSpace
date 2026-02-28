@@ -18,6 +18,7 @@ import {
   Hotel,
   DoorOpen,
   Check,
+  ConciergeBell,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -28,6 +29,7 @@ const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }
   { key: 'office', label: 'Office', icon: <Building2 size={20} color={Colors.categoryOffice} /> },
   { key: 'hostel', label: 'Hostel', icon: <Hotel size={20} color={Colors.categoryHostel} /> },
   { key: 'room', label: 'Room', icon: <DoorOpen size={20} color={Colors.categoryRoom} /> },
+  { key: 'hotel', label: 'Hotel', icon: <ConciergeBell size={20} color={Colors.categoryHotel} /> },
 ];
 
 const priceRanges = [
