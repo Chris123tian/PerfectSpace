@@ -12,11 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Search, SlidersHorizontal, MapPin, Building2, Home, Hotel, DoorOpen, ChevronRight } from 'lucide-react-native';
+import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { properties } from '@/mocks/properties';
+import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { PropertyType } from '@/types/property';
 import PropertyCard from '@/components/PropertyCard';
 
@@ -29,6 +30,8 @@ const categories: { key: PropertyType | 'all'; label: string; icon: React.ReactN
 ];
 
 export default function HomeScreen() {
+  const { user } = useAuth();
+  const { activeProperties } = useData();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -38,17 +41,8 @@ export default function HomeScreen() {
     setSelectedCategory(key);
   }, []);
 
-  const handleFilterPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/filters');
-  }, []);
-
-  const handleSearchSubmit = useCallback(() => {
-    console.log('Search submitted:', searchQuery);
-  }, [searchQuery]);
-
   const filteredProperties = useMemo(() => {
-    let result = properties;
+    let result = activeProperties;
     if (selectedCategory !== 'all') {
       result = result.filter(p => p.type === selectedCategory);
     }
@@ -62,9 +56,9 @@ export default function HomeScreen() {
       );
     }
     return result;
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, activeProperties]);
 
-  const featuredProperties = useMemo(() => properties.filter(p => p.featured), []);
+  const featuredProperties = useMemo(() => activeProperties.filter(p => p.featured), [activeProperties]);
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 80],
@@ -72,18 +66,25 @@ export default function HomeScreen() {
     extrapolate: 'clamp',
   });
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>Find your</Text>
-              <Text style={styles.greetingBold}>Perfect Space</Text>
+              <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
+              <Text style={styles.greetingBold}>Find your Perfect Space</Text>
             </View>
             <Pressable onPress={() => router.push('/(tabs)/profile')} testID="header-avatar">
               <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face' }}
+                source={{ uri: user?.avatar ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200' }}
                 style={styles.avatar}
               />
             </Pressable>
@@ -98,12 +99,11 @@ export default function HomeScreen() {
                 placeholderTextColor={Colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                onSubmitEditing={handleSearchSubmit}
                 returnKeyType="search"
                 testID="search-input"
               />
             </View>
-            <Pressable style={styles.filterButton} onPress={handleFilterPress} testID="filter-button">
+            <Pressable style={styles.filterButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
               <SlidersHorizontal size={20} color={Colors.white} />
             </Pressable>
           </View>
@@ -119,6 +119,23 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         style={styles.scrollView}
       >
+        {user?.role === 'landlord' && (
+          <Pressable
+            style={styles.addPropertyBanner}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/add-property'); }}
+            testID="add-property-banner"
+          >
+            <View style={styles.addPropertyLeft}>
+              <Plus size={20} color={Colors.white} />
+              <View>
+                <Text style={styles.addPropertyTitle}>List a Property</Text>
+                <Text style={styles.addPropertySubtitle}>Reach thousands of renters</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={Colors.white} />
+          </Pressable>
+        )}
+
         <View style={styles.categoriesSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesRow}>
             {categories.map((cat) => (
@@ -162,12 +179,7 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Featured</Text>
-              <Pressable
-                style={styles.seeAllButton}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-              >
+              <Pressable style={styles.seeAllButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
                 <Text style={styles.seeAllText}>See all</Text>
                 <ChevronRight size={16} color={Colors.primary} />
               </Pressable>
@@ -211,168 +223,45 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.white,
-    zIndex: 10,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  safeArea: { backgroundColor: Colors.white, zIndex: 10 },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: Colors.white,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    paddingHorizontal: 20, paddingBottom: 16, backgroundColor: Colors.white,
+    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingTop: 8,
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingTop: 8 },
+  greeting: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
+  greetingBold: { fontSize: 24, fontWeight: '800' as const, color: Colors.text, letterSpacing: -0.5 },
+  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: Colors.primaryLight },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.background, borderRadius: 14, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 8, gap: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: Colors.text },
+  filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  scrollView: { flex: 1 },
+  addPropertyBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.primary, marginHorizontal: 20, marginTop: 16, padding: 16, borderRadius: 16,
   },
-  greeting: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  greetingBold: {
-    fontSize: 26,
-    fontWeight: '800' as const,
-    color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: Colors.primaryLight,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-  },
-  filterButton: {
-    backgroundColor: Colors.primary,
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  categoriesSection: {
-    paddingTop: 16,
-    marginBottom: 4,
-  },
-  categoriesRow: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    gap: 8,
-  },
-  categoryChipInactive: {
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  categoryIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-  },
-  categoryTextActive: {
-    color: Colors.white,
-  },
-  section: {
-    paddingTop: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.primary,
-  },
-  countText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  featuredList: {
-    paddingHorizontal: 20,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  bottomSpacer: {
-    height: 30,
-  },
+  addPropertyLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addPropertyTitle: { fontSize: 16, fontWeight: '700' as const, color: Colors.white },
+  addPropertySubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  categoriesSection: { paddingTop: 16, marginBottom: 4 },
+  categoriesRow: { paddingHorizontal: 20, gap: 8 },
+  categoryChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, gap: 8 },
+  categoryChipInactive: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  categoryIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  categoryText: { fontSize: 13, fontWeight: '600' as const },
+  categoryTextActive: { color: Colors.white },
+  section: { paddingTop: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 14 },
+  sectionTitle: { fontSize: 20, fontWeight: '700' as const, color: Colors.text },
+  seeAllButton: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  seeAllText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
+  countText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const },
+  featuredList: { paddingHorizontal: 20 },
+  emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: '600' as const, color: Colors.text, marginTop: 16 },
+  emptySubtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 8, textAlign: 'center' },
+  bottomSpacer: { height: 30 },
 });
