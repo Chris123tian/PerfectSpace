@@ -28,6 +28,8 @@ function RootLayoutNav() {
       <Stack.Screen name="edit-profile" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="admin" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="my-reviews" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="tenant-rights" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
   );
 }

@@ -1,9 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { X, Building2, Home, Hotel, DoorOpen } from 'lucide-react-native';
+import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
@@ -16,11 +18,27 @@ const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }
   { key: 'room', label: 'Room', icon: <DoorOpen size={20} color={Colors.categoryRoom} /> },
 ];
 
-const defaultImages: Record<PropertyType, string[]> = {
-  apartment: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800', 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800'],
-  office: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=800', 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800'],
-  hostel: ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800', 'https://images.unsplash.com/photo-1596276020587-8044fe049813?w=800'],
-  room: ['https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800', 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800'],
+const fallbackImages: Record<PropertyType, string[]> = {
+  apartment: [
+    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800',
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800',
+    'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800',
+  ],
+  office: [
+    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800',
+    'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800',
+    'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800',
+  ],
+  hostel: [
+    'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800',
+    'https://images.unsplash.com/photo-1596276020587-8044fe049813?w=800',
+    'https://images.unsplash.com/photo-1520277739336-7bf67edfa768?w=800',
+  ],
+  room: [
+    'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800',
+    'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800',
+    'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800',
+  ],
 };
 
 export default function AddPropertyScreen() {
@@ -38,12 +56,88 @@ export default function AddPropertyScreen() {
   const [address, setAddress] = useState<string>('');
   const [city, setCity] = useState<string>('');
   const [amenities, setAmenities] = useState<string>('');
+  const [images, setImages] = useState<string[]>([]);
+
+  const pickImage = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        selectionLimit: 6 - images.length,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const newUris = result.assets.map(a => a.uri);
+        setImages(prev => [...prev, ...newUris].slice(0, 6));
+        console.log('[AddProperty] Images picked:', newUris.length);
+      }
+    } catch (e) {
+      console.log('[AddProperty] Image pick error:', e);
+      Alert.alert('Error', 'Failed to pick images. Please try again.');
+    }
+  }, [images.length]);
+
+  const takePhoto = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow camera access to take photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setImages(prev => [...prev, result.assets[0].uri].slice(0, 6));
+        console.log('[AddProperty] Photo taken');
+      }
+    } catch (e) {
+      console.log('[AddProperty] Camera error:', e);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  }, []);
+
+  const removeImage = useCallback((index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const showImageOptions = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS === 'web') {
+      pickImage();
+      return;
+    }
+    Alert.alert('Add Photos', 'Choose how to add property images', [
+      { text: 'Camera', onPress: takePhoto },
+      { text: 'Photo Library', onPress: pickImage },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [pickImage, takePhoto]);
 
   const handleSubmit = useCallback(async () => {
     if (!user) return;
     if (!title.trim() || !description.trim() || !price.trim() || !address.trim() || !city.trim()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
+      return;
+    }
+
+    const finalImages = images.length >= 3 ? images : fallbackImages[type];
+
+    if (images.length > 0 && images.length < 3) {
+      Alert.alert('More Images Needed', 'Please add at least 3 images for your property, or remove all to use default images.');
       return;
     }
 
@@ -67,7 +161,7 @@ export default function AddPropertyScreen() {
         city: city.trim(),
         latitude: 40.7128 + (Math.random() - 0.5) * 0.1,
         longitude: -74.006 + (Math.random() - 0.5) * 0.1,
-        images: defaultImages[type],
+        images: finalImages,
         amenities: amenities.split(',').map(a => a.trim()).filter(Boolean),
         ownerId: user.id,
         ownerName: user.name,
@@ -79,7 +173,9 @@ export default function AddPropertyScreen() {
         createdAt: new Date().toISOString().split('T')[0],
       };
 
+      console.log('[AddProperty] Submitting property:', newProperty.title, 'with', finalImages.length, 'images');
       await addProperty(newProperty);
+      console.log('[AddProperty] Property added successfully');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Your property has been listed!', [
         { text: 'OK', onPress: () => router.back() },
@@ -90,7 +186,7 @@ export default function AddPropertyScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, addProperty]);
+  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty]);
 
   return (
     <View style={styles.container}>
@@ -105,6 +201,44 @@ export default function AddPropertyScreen() {
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Property Images</Text>
+          <Text style={styles.sectionHint}>Add at least 3 photos of your property (max 6)</Text>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
+            {images.map((uri, index) => (
+              <View key={`img-${index}`} style={styles.imageThumb}>
+                <Image source={{ uri }} style={styles.thumbImage} contentFit="cover" />
+                <Pressable style={styles.removeImageBtn} onPress={() => removeImage(index)} testID={`remove-img-${index}`}>
+                  <Trash2 size={14} color={Colors.white} />
+                </Pressable>
+                {index === 0 && (
+                  <View style={styles.coverBadge}>
+                    <Text style={styles.coverBadgeText}>Cover</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+            {images.length < 6 && (
+              <Pressable style={styles.addImageBtn} onPress={showImageOptions} testID="add-image">
+                <ImagePlus size={28} color={Colors.primary} />
+                <Text style={styles.addImageText}>Add Photo</Text>
+              </Pressable>
+            )}
+          </ScrollView>
+
+          {images.length === 0 && (
+            <View style={styles.defaultImagesNote}>
+              <Text style={styles.noteText}>No images added — default images for the selected property type will be used.</Text>
+            </View>
+          )}
+          {images.length > 0 && images.length < 3 && (
+            <View style={styles.warningNote}>
+              <Text style={styles.warningText}>Add at least {3 - images.length} more image{3 - images.length > 1 ? 's' : ''} (minimum 3 required)</Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Listing Type</Text>
           <View style={styles.pillRow}>
@@ -189,7 +323,20 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
   scrollContent: { padding: 20 },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 17, fontWeight: '700' as const, color: Colors.text, marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '700' as const, color: Colors.text, marginBottom: 4 },
+  sectionHint: { fontSize: 13, color: Colors.textSecondary, marginBottom: 12 },
+  imageRow: { gap: 10, paddingVertical: 4 },
+  imageThumb: { width: 110, height: 110, borderRadius: 14, overflow: 'hidden', position: 'relative' as const },
+  thumbImage: { width: '100%', height: '100%' },
+  removeImageBtn: { position: 'absolute' as const, top: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  coverBadge: { position: 'absolute' as const, bottom: 6, left: 6, backgroundColor: Colors.primary, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  coverBadgeText: { fontSize: 10, fontWeight: '700' as const, color: Colors.white },
+  addImageBtn: { width: 110, height: 110, borderRadius: 14, borderWidth: 2, borderColor: Colors.primary, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight + '30', gap: 6 },
+  addImageText: { fontSize: 12, fontWeight: '600' as const, color: Colors.primary },
+  defaultImagesNote: { backgroundColor: Colors.primaryLight + '40', padding: 12, borderRadius: 12, marginTop: 10 },
+  noteText: { fontSize: 13, color: Colors.primary, lineHeight: 18 },
+  warningNote: { backgroundColor: Colors.warning + '15', padding: 12, borderRadius: 12, marginTop: 10 },
+  warningText: { fontSize: 13, color: Colors.warning, fontWeight: '600' as const },
   pillRow: { flexDirection: 'row', gap: 10 },
   pill: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.white, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.border },
   pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

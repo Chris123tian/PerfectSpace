@@ -77,14 +77,14 @@ export default function ProfileScreen() {
       title: 'Account',
       items: [
         { id: 'notifications', icon: <Bell size={20} color={Colors.categoryOffice} />, label: 'Notifications', subtitle: unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : undefined, action: () => router.push('/notifications'), showArrow: true, badge: unreadNotificationCount || undefined },
-        { id: 'reviews', icon: <Star size={20} color={Colors.accent} />, label: 'My Reviews', subtitle: `${user.reviewsCount} reviews`, action: () => Alert.alert('Reviews', 'Your reviews will appear here.'), showArrow: true },
-        { id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : 'Not verified', action: () => Alert.alert('Verification', user.verified ? 'Your identity has been verified.' : 'Complete verification to build trust.'), showArrow: true },
+        { id: 'reviews', icon: <Star size={20} color={Colors.accent} />, label: 'My Reviews', subtitle: `${user.reviewsCount} reviews`, action: () => router.push('/my-reviews'), showArrow: true },
+        { id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : 'Not verified', action: () => Alert.alert('Verification Status', user.verified ? 'Your identity has been verified. You have a trusted badge on your profile.' : 'To get verified, ensure your profile is complete with a valid phone number and photo. Verification helps build trust with other users.'), showArrow: true },
       ],
     },
     {
       title: 'Resources',
       items: [
-        { id: 'tenant-rights', icon: <FileText size={20} color={Colors.categoryApartment} />, label: 'Tenant Rights Guide', action: () => Alert.alert('Tenant Rights', 'A comprehensive guide to tenant rights, rental agreements, and your responsibilities. Coming soon!'), showArrow: true },
+        { id: 'tenant-rights', icon: <FileText size={20} color={Colors.categoryApartment} />, label: 'Tenant Rights Guide', action: () => router.push('/tenant-rights'), showArrow: true },
         { id: 'emergency', icon: <Phone size={20} color={Colors.error} />, label: 'Emergency Contacts', action: () => Alert.alert('Emergency Support', 'Emergency contacts:\n\n• Police: 911\n• Fire: 911\n• Maintenance: (555) 999-0000\n• Support: (555) 123-HELP'), showArrow: true },
       ],
     },

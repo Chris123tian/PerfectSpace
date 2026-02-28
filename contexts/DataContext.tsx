@@ -34,6 +34,7 @@ export const [DataProvider, useData] = createContextHook(() => {
   const propertiesQuery = useQuery({
     queryKey: ['properties'],
     queryFn: () => loadOrSeed<Property>(PROPERTIES_KEY, seedProperties),
+    refetchInterval: 5000,
   });
 
   const conversationsQuery = useQuery({
@@ -62,6 +63,7 @@ export const [DataProvider, useData] = createContextHook(() => {
   const reviewsQuery = useQuery({
     queryKey: ['reviews'],
     queryFn: () => loadOrSeed<Review>(REVIEWS_KEY, seedReviews),
+    refetchInterval: 10000,
   });
 
   const savedQuery = useQuery({
@@ -123,7 +125,9 @@ export const [DataProvider, useData] = createContextHook(() => {
       return updated;
     },
     onSuccess: (data) => {
+      console.log('[Data] Property added, updating cache with', data.length, 'properties');
       queryClient.setQueryData(['properties'], data);
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 
@@ -139,6 +143,7 @@ export const [DataProvider, useData] = createContextHook(() => {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['properties'], data);
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 
@@ -152,6 +157,7 @@ export const [DataProvider, useData] = createContextHook(() => {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['properties'], data);
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 

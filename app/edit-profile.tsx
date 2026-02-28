@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { X, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -13,6 +14,65 @@ export default function EditProfileScreen() {
   const [name, setName] = useState<string>(user?.name ?? '');
   const [phone, setPhone] = useState<string>(user?.phone ?? '');
   const [bio, setBio] = useState<string>(user?.bio ?? '');
+  const [avatarUri, setAvatarUri] = useState<string>(user?.avatar ?? '');
+
+  const handleChangePhoto = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const pickFromLibrary = async () => {
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please allow access to your photo library.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets[0]) {
+          setAvatarUri(result.assets[0].uri);
+          console.log('[EditProfile] Photo selected from library');
+        }
+      } catch (e) {
+        console.log('[EditProfile] Library error:', e);
+      }
+    };
+
+    const takePhoto = async () => {
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please allow camera access.');
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets[0]) {
+          setAvatarUri(result.assets[0].uri);
+          console.log('[EditProfile] Photo taken');
+        }
+      } catch (e) {
+        console.log('[EditProfile] Camera error:', e);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      pickFromLibrary();
+      return;
+    }
+
+    Alert.alert('Change Photo', 'Choose a new profile photo', [
+      { text: 'Camera', onPress: takePhoto },
+      { text: 'Photo Library', onPress: pickFromLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -21,14 +81,22 @@ export default function EditProfileScreen() {
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await updateProfile({ name: name.trim(), phone: phone.trim(), bio: bio.trim() });
+      const updates: { name: string; phone: string; bio: string; avatar?: string } = {
+        name: name.trim(),
+        phone: phone.trim(),
+        bio: bio.trim(),
+      };
+      if (avatarUri !== user?.avatar) {
+        updates.avatar = avatarUri;
+      }
+      await updateProfile(updates);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Profile updated!', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e) {
       console.log('[EditProfile] Error:', e);
       Alert.alert('Error', 'Failed to update profile');
     }
-  }, [name, phone, bio, updateProfile]);
+  }, [name, phone, bio, avatarUri, user?.avatar, updateProfile]);
 
   if (!user) return null;
 
@@ -46,8 +114,8 @@ export default function EditProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.avatarSection}>
-          <Image source={{ uri: user.avatar }} style={styles.avatar} />
-          <Pressable style={styles.changePhotoBtn} onPress={() => Alert.alert('Change Photo', 'Photo upload coming soon!')}>
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          <Pressable style={styles.changePhotoBtn} onPress={handleChangePhoto} testID="change-photo">
             <Camera size={16} color={Colors.primary} />
             <Text style={styles.changePhotoText}>Change Photo</Text>
           </Pressable>
