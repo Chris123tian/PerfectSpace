@@ -1,97 +1,60 @@
 import { useCallback, useMemo } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { Property, Conversation, ChatMessage, Booking, AppNotification, Review, BookingStatus } from '@/types/property';
-import { seedProperties, seedConversations, seedChatMessages, seedBookings, seedNotifications, seedReviews } from '@/mocks/properties';
 import { useAuth } from './AuthContext';
-
-const PROPERTIES_KEY = 'ph_properties';
-const CONVERSATIONS_KEY = 'ph_conversations';
-const MESSAGES_KEY = 'ph_messages';
-const BOOKINGS_KEY = 'ph_bookings';
-const NOTIFICATIONS_KEY = 'ph_notifications';
-const REVIEWS_KEY = 'ph_reviews';
-const SAVED_KEY = 'ph_saved';
-
-async function loadOrSeed<T>(key: string, seed: T[]): Promise<T[]> {
-  const stored = await AsyncStorage.getItem(key);
-  if (!stored) {
-    await AsyncStorage.setItem(key, JSON.stringify(seed));
-    return seed;
-  }
-  return JSON.parse(stored);
-}
-
-async function save<T>(key: string, data: T[]): Promise<void> {
-  await AsyncStorage.setItem(key, JSON.stringify(data));
-}
+import { trpc } from '@/lib/trpc';
 
 export const [DataProvider, useData] = createContextHook(() => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const propertiesQuery = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => loadOrSeed<Property>(PROPERTIES_KEY, seedProperties),
+  const propertiesQuery = trpc.properties.list.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 1000,
   });
 
-  const conversationsQuery = useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => loadOrSeed<Conversation>(CONVERSATIONS_KEY, seedConversations),
+  const conversationsQuery = trpc.conversations.list.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 1000,
   });
 
-  const messagesQuery = useQuery({
-    queryKey: ['chatMessages'],
-    queryFn: () => loadOrSeed<ChatMessage>(MESSAGES_KEY, seedChatMessages),
+  const messagesQuery = trpc.conversations.allMessages.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 1000,
   });
 
-  const bookingsQuery = useQuery({
-    queryKey: ['bookings'],
-    queryFn: () => loadOrSeed<Booking>(BOOKINGS_KEY, seedBookings),
+  const bookingsQuery = trpc.bookings.list.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 1000,
   });
 
-  const notificationsQuery = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications),
+  const notificationsQuery = trpc.notifications.list.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 1000,
   });
 
-  const reviewsQuery = useQuery({
-    queryKey: ['reviews'],
-    queryFn: () => loadOrSeed<Review>(REVIEWS_KEY, seedReviews),
+  const reviewsQuery = trpc.reviews.list.useQuery(undefined, {
     refetchInterval: 5000,
     staleTime: 2000,
   });
 
   const userId = user?.id;
-  const savedQuery = useQuery({
-    queryKey: ['savedProperties', userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      const stored = await AsyncStorage.getItem(`${SAVED_KEY}_${userId}`);
-      return stored ? JSON.parse(stored) as string[] : [];
-    },
-    enabled: !!userId,
-    refetchInterval: 5000,
-  });
+  const savedQuery = trpc.properties.getSaved.useQuery(
+    { userId: userId ?? '' },
+    {
+      enabled: !!userId,
+      refetchInterval: 5000,
+    }
+  );
 
-  const properties = useMemo(() => propertiesQuery.data ?? [], [propertiesQuery.data]);
-  const conversations = useMemo(() => conversationsQuery.data ?? [], [conversationsQuery.data]);
-  const chatMessages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
-  const bookings = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
-  const notifications = useMemo(() => notificationsQuery.data ?? [], [notificationsQuery.data]);
-  const reviews = useMemo(() => reviewsQuery.data ?? [], [reviewsQuery.data]);
-  const savedPropertyIds = useMemo(() => savedQuery.data ?? [], [savedQuery.data]);
+  const properties = useMemo(() => (propertiesQuery.data ?? []) as Property[], [propertiesQuery.data]);
+  const conversations = useMemo(() => (conversationsQuery.data ?? []) as Conversation[], [conversationsQuery.data]);
+  const chatMessages = useMemo(() => (messagesQuery.data ?? []) as ChatMessage[], [messagesQuery.data]);
+  const bookings = useMemo(() => (bookingsQuery.data ?? []) as Booking[], [bookingsQuery.data]);
+  const notifications = useMemo(() => (notificationsQuery.data ?? []) as AppNotification[], [notificationsQuery.data]);
+  const reviews = useMemo(() => (reviewsQuery.data ?? []) as Review[], [reviewsQuery.data]);
+  const savedPropertyIds = useMemo(() => (savedQuery.data ?? []) as string[], [savedQuery.data]);
 
   const userNotifications = useMemo(() => {
     if (!user) return [];
@@ -130,366 +93,191 @@ export const [DataProvider, useData] = createContextHook(() => {
     [properties]
   );
 
-  const addPropertyMutation = useMutation({
-    mutationFn: async (property: Property) => {
-      console.log('[Data] Adding property:', property.title);
-      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const updated = [property, ...current];
-      await save(PROPERTIES_KEY, updated);
-      return updated;
-    },
-    onSuccess: (data) => {
-      console.log('[Data] Property added, total:', data.length);
-      queryClient.setQueryData(['properties'], data);
+  const addPropertyMutation = trpc.properties.add.useMutation({
+    onSuccess: () => {
+      console.log('[Data] Property added via backend');
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
-  const updatePropertyMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Property> }) => {
-      console.log('[Data] Updating property:', id);
-      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const idx = current.findIndex(p => p.id === id);
-      if (idx === -1) throw new Error('Property not found');
-      current[idx] = { ...current[idx], ...updates };
-      await save(PROPERTIES_KEY, current);
-      return current;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['properties'], data);
+  const updatePropertyMutation = trpc.properties.update.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
-  const approvePropertyMutation = useMutation({
-    mutationFn: async (id: string) => {
-      console.log('[Data] Approving property:', id);
-      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const idx = current.findIndex(p => p.id === id);
-      if (idx === -1) throw new Error('Property not found');
-      current[idx] = { ...current[idx], status: 'active' };
-      await save(PROPERTIES_KEY, current);
-
-      const prop = current[idx];
-      const notif: AppNotification = {
-        id: 'n_' + Date.now().toString(36),
-        userId: prop.ownerId,
-        title: 'Property Approved',
-        message: `Your property "${prop.title}" has been approved and is now live!`,
-        type: 'property',
-        read: false,
-        createdAt: new Date().toISOString(),
-        data: { propertyId: id },
-      };
-      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const updatedNotifs = [notif, ...notifs];
-      await save(NOTIFICATIONS_KEY, updatedNotifs);
-      queryClient.setQueryData(['notifications'], updatedNotifs);
-
-      return current;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['properties'], data);
+  const approvePropertyMutation = trpc.properties.approve.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
-  const rejectPropertyMutation = useMutation({
-    mutationFn: async (id: string) => {
-      console.log('[Data] Rejecting property:', id);
-      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const idx = current.findIndex(p => p.id === id);
-      if (idx === -1) throw new Error('Property not found');
-      current[idx] = { ...current[idx], status: 'rejected' };
-      await save(PROPERTIES_KEY, current);
-
-      const prop = current[idx];
-      const notif: AppNotification = {
-        id: 'n_' + Date.now().toString(36),
-        userId: prop.ownerId,
-        title: 'Property Rejected',
-        message: `Your property "${prop.title}" was not approved. Please review and resubmit.`,
-        type: 'property',
-        read: false,
-        createdAt: new Date().toISOString(),
-        data: { propertyId: id },
-      };
-      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const updatedNotifs = [notif, ...notifs];
-      await save(NOTIFICATIONS_KEY, updatedNotifs);
-      queryClient.setQueryData(['notifications'], updatedNotifs);
-
-      return current;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['properties'], data);
+  const rejectPropertyMutation = trpc.properties.reject.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
-  const deletePropertyMutation = useMutation({
-    mutationFn: async (id: string) => {
-      console.log('[Data] Deleting property:', id);
-      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const updated = current.filter(p => p.id !== id);
-      await save(PROPERTIES_KEY, updated);
-      return updated;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['properties'], data);
+  const deletePropertyMutation = trpc.properties.delete.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
-  const toggleSaveMutation = useMutation({
-    mutationFn: async (propertyId: string) => {
-      if (!user) throw new Error('Not authenticated');
-      const key = `${SAVED_KEY}_${user.id}`;
-      const stored = await AsyncStorage.getItem(key);
-      const current: string[] = stored ? JSON.parse(stored) : [];
-      const updated = current.includes(propertyId)
-        ? current.filter(id => id !== propertyId)
-        : [...current, propertyId];
-      await AsyncStorage.setItem(key, JSON.stringify(updated));
-      return updated;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['savedProperties', user?.id], data);
+  const toggleSaveMutation = trpc.properties.toggleSave.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['properties', 'getSaved']] });
     },
   });
 
-  const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, text }: { conversationId: string; text: string }) => {
-      if (!user) throw new Error('Not authenticated');
-      console.log('[Data] Sending message in:', conversationId);
-
-      const newMsg: ChatMessage = {
-        id: 'cm_' + Date.now().toString(36),
-        conversationId,
-        senderId: user.id,
-        text,
-        timestamp: new Date().toISOString(),
-      };
-
-      const msgs = await loadOrSeed<ChatMessage>(MESSAGES_KEY, seedChatMessages);
-      const updatedMsgs = [...msgs, newMsg];
-      await save(MESSAGES_KEY, updatedMsgs);
-
-      const convs = await loadOrSeed<Conversation>(CONVERSATIONS_KEY, seedConversations);
-      const convIdx = convs.findIndex(c => c.id === conversationId);
-      if (convIdx !== -1) {
-        convs[convIdx].lastMessage = text;
-        convs[convIdx].lastMessageTime = newMsg.timestamp;
-        const otherIds = convs[convIdx].participantIds.filter(id => id !== user.id);
-        otherIds.forEach(id => {
-          convs[convIdx].unreadCount[id] = (convs[convIdx].unreadCount[id] ?? 0) + 1;
-        });
-        await save(CONVERSATIONS_KEY, convs);
-      }
-
-      return { messages: updatedMsgs, conversations: convs };
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['chatMessages'], data.messages);
-      queryClient.setQueryData(['conversations'], data.conversations);
+  const sendMessageMutation = trpc.conversations.sendMessage.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
+      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
     },
   });
 
-  const startConversationMutation = useMutation({
-    mutationFn: async ({ otherUserId, otherUserName, otherUserAvatar, propertyId, propertyTitle, propertyImage, initialMessage }: {
-      otherUserId: string;
-      otherUserName: string;
-      otherUserAvatar: string;
-      propertyId: string;
-      propertyTitle: string;
-      propertyImage: string;
-      initialMessage: string;
-    }) => {
-      if (!user) throw new Error('Not authenticated');
-      console.log('[Data] Starting conversation with:', otherUserName);
-
-      const convs = await loadOrSeed<Conversation>(CONVERSATIONS_KEY, seedConversations);
-      const existing = convs.find(c =>
-        c.participantIds.includes(user.id) &&
-        c.participantIds.includes(otherUserId) &&
-        c.propertyId === propertyId
-      );
-
-      if (existing) return existing.id;
-
-      const newConv: Conversation = {
-        id: 'conv_' + Date.now().toString(36),
-        participantIds: [user.id, otherUserId],
-        participantNames: [user.name, otherUserName],
-        participantAvatars: [user.avatar, otherUserAvatar],
-        propertyId,
-        propertyTitle,
-        propertyImage,
-        lastMessage: initialMessage,
-        lastMessageTime: new Date().toISOString(),
-        unreadCount: { [user.id]: 0, [otherUserId]: 1 },
-      };
-
-      const newMsg: ChatMessage = {
-        id: 'cm_' + Date.now().toString(36),
-        conversationId: newConv.id,
-        senderId: user.id,
-        text: initialMessage,
-        timestamp: new Date().toISOString(),
-      };
-
-      const updatedConvs = [newConv, ...convs];
-      await save(CONVERSATIONS_KEY, updatedConvs);
-
-      const msgs = await loadOrSeed<ChatMessage>(MESSAGES_KEY, seedChatMessages);
-      const updatedMsgs = [...msgs, newMsg];
-      await save(MESSAGES_KEY, updatedMsgs);
-
-      queryClient.setQueryData(['conversations'], updatedConvs);
-      queryClient.setQueryData(['chatMessages'], updatedMsgs);
-
-      return newConv.id;
+  const startConversationMutation = trpc.conversations.startConversation.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
     },
   });
 
-  const markConversationReadMutation = useMutation({
-    mutationFn: async (conversationId: string) => {
-      if (!user) return;
-      const convs = await loadOrSeed<Conversation>(CONVERSATIONS_KEY, seedConversations);
-      const idx = convs.findIndex(c => c.id === conversationId);
-      if (idx !== -1) {
-        convs[idx].unreadCount[user.id] = 0;
-        await save(CONVERSATIONS_KEY, convs);
-      }
-      return convs;
-    },
-    onSuccess: (data) => {
-      if (data) queryClient.setQueryData(['conversations'], data);
+  const markConversationReadMutation = trpc.conversations.markRead.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
     },
   });
 
-  const createBookingMutation = useMutation({
-    mutationFn: async (booking: Booking) => {
-      console.log('[Data] Creating booking:', booking.propertyTitle);
-      const current = await loadOrSeed<Booking>(BOOKINGS_KEY, seedBookings);
-      const updated = [booking, ...current];
-      await save(BOOKINGS_KEY, updated);
-
-      const notif: AppNotification = {
-        id: 'n_' + Date.now().toString(36),
-        userId: booking.ownerId,
-        title: 'New Viewing Request',
-        message: `${booking.renterName} wants to view ${booking.propertyTitle} on ${booking.date}.`,
-        type: 'booking',
-        read: false,
-        createdAt: new Date().toISOString(),
-        data: { bookingId: booking.id },
-      };
-      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const updatedNotifs = [notif, ...notifs];
-      await save(NOTIFICATIONS_KEY, updatedNotifs);
-      queryClient.setQueryData(['notifications'], updatedNotifs);
-      return updated;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['bookings'], data);
+  const createBookingMutation = trpc.bookings.create.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
-  const updateBookingMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: BookingStatus }) => {
-      console.log('[Data] Updating booking:', id, status);
-      const current = await loadOrSeed<Booking>(BOOKINGS_KEY, seedBookings);
-      const idx = current.findIndex(b => b.id === id);
-      if (idx === -1) throw new Error('Booking not found');
-      current[idx].status = status;
-      await save(BOOKINGS_KEY, current);
-
-      const booking = current[idx];
-      const targetUserId = user?.role === 'landlord' ? booking.renterId : booking.ownerId;
-      const notif: AppNotification = {
-        id: 'n_' + Date.now().toString(36),
-        userId: targetUserId,
-        title: `Booking ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-        message: `Your viewing for ${booking.propertyTitle} has been ${status}.`,
-        type: 'booking',
-        read: false,
-        createdAt: new Date().toISOString(),
-        data: { bookingId: id },
-      };
-      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const updatedNotifs = [notif, ...notifs];
-      await save(NOTIFICATIONS_KEY, updatedNotifs);
-      queryClient.setQueryData(['notifications'], updatedNotifs);
-      return current;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['bookings'], data);
+  const updateBookingMutation = trpc.bookings.updateStatus.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
-  const addReviewMutation = useMutation({
-    mutationFn: async ({ propertyId, rating, comment }: { propertyId: string; rating: number; comment: string }) => {
-      if (!user) throw new Error('Not authenticated');
-      console.log('[Data] Adding review for:', propertyId);
-
-      const newReview: Review = {
-        id: 'r_' + Date.now().toString(36),
-        propertyId,
-        userId: user.id,
-        userName: user.name,
-        userAvatar: user.avatar,
-        rating,
-        comment,
-        date: new Date().toISOString().split('T')[0],
-      };
-
-      const current = await loadOrSeed<Review>(REVIEWS_KEY, seedReviews);
-      const updated = [newReview, ...current];
-      await save(REVIEWS_KEY, updated);
-
-      const props = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
-      const propIdx = props.findIndex(p => p.id === propertyId);
-      if (propIdx !== -1) {
-        const propReviews = updated.filter(r => r.propertyId === propertyId);
-        const avgRating = propReviews.reduce((sum, r) => sum + r.rating, 0) / propReviews.length;
-        props[propIdx].rating = Math.round(avgRating * 10) / 10;
-        props[propIdx].reviewCount = propReviews.length;
-        await save(PROPERTIES_KEY, props);
-        queryClient.setQueryData(['properties'], [...props]);
-      }
-
-      return updated;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['reviews'], data);
+  const addReviewMutation = trpc.reviews.add.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['reviews', 'list']] });
+      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
-  const markNotificationReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const current = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const idx = current.findIndex(n => n.id === id);
-      if (idx !== -1) {
-        current[idx].read = true;
-        await save(NOTIFICATIONS_KEY, current);
-      }
-      return current;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['notifications'], data);
+  const markNotificationReadMutation = trpc.notifications.markRead.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
-  const markAllNotificationsReadMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) return [];
-      const current = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      const updated = current.map(n =>
-        (user.role === 'admin' || n.userId === user.id) ? { ...n, read: true } : n
-      );
-      await save(NOTIFICATIONS_KEY, updated);
-      return updated;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['notifications'], data);
+  const markAllNotificationsReadMutation = trpc.notifications.markAllRead.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
+
+  const addProperty = useCallback(async (property: Property) => {
+    return addPropertyMutation.mutateAsync({ property: property as unknown });
+  }, [addPropertyMutation]);
+
+  const updateProperty = useCallback(async ({ id, updates }: { id: string; updates: Partial<Property> }) => {
+    return updatePropertyMutation.mutateAsync({ id, updates: updates as Record<string, unknown> });
+  }, [updatePropertyMutation]);
+
+  const approveProperty = useCallback(async (id: string) => {
+    return approvePropertyMutation.mutateAsync({ id });
+  }, [approvePropertyMutation]);
+
+  const rejectProperty = useCallback(async (id: string) => {
+    return rejectPropertyMutation.mutateAsync({ id });
+  }, [rejectPropertyMutation]);
+
+  const deleteProperty = useCallback(async (id: string) => {
+    return deletePropertyMutation.mutateAsync({ id });
+  }, [deletePropertyMutation]);
+
+  const toggleSave = useCallback(async (propertyId: string) => {
+    if (!user) throw new Error('Not authenticated');
+    return toggleSaveMutation.mutateAsync({ userId: user.id, propertyId });
+  }, [user, toggleSaveMutation]);
+
+  const sendMessage = useCallback(async ({ conversationId, text }: { conversationId: string; text: string }) => {
+    if (!user) throw new Error('Not authenticated');
+    return sendMessageMutation.mutateAsync({ conversationId, senderId: user.id, text });
+  }, [user, sendMessageMutation]);
+
+  const startConversation = useCallback(async ({ otherUserId, otherUserName, otherUserAvatar, propertyId, propertyTitle, propertyImage, initialMessage }: {
+    otherUserId: string;
+    otherUserName: string;
+    otherUserAvatar: string;
+    propertyId: string;
+    propertyTitle: string;
+    propertyImage: string;
+    initialMessage: string;
+  }) => {
+    if (!user) throw new Error('Not authenticated');
+    return startConversationMutation.mutateAsync({
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      otherUserId,
+      otherUserName,
+      otherUserAvatar,
+      propertyId,
+      propertyTitle,
+      propertyImage,
+      initialMessage,
+    });
+  }, [user, startConversationMutation]);
+
+  const markConversationRead = useCallback((conversationId: string) => {
+    if (!user) return;
+    markConversationReadMutation.mutate({ conversationId, userId: user.id });
+  }, [user, markConversationReadMutation]);
+
+  const createBooking = useCallback(async (booking: Booking) => {
+    return createBookingMutation.mutateAsync({ booking: booking as unknown });
+  }, [createBookingMutation]);
+
+  const updateBooking = useCallback(async ({ id, status }: { id: string; status: BookingStatus }) => {
+    if (!user) throw new Error('Not authenticated');
+    return updateBookingMutation.mutateAsync({
+      id,
+      status,
+      currentUserId: user.id,
+      currentUserRole: user.role,
+    });
+  }, [user, updateBookingMutation]);
+
+  const addReview = useCallback(async ({ propertyId, rating, comment }: { propertyId: string; rating: number; comment: string }) => {
+    if (!user) throw new Error('Not authenticated');
+    return addReviewMutation.mutateAsync({
+      propertyId,
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      rating,
+      comment,
+    });
+  }, [user, addReviewMutation]);
+
+  const markNotificationRead = useCallback((id: string) => {
+    markNotificationReadMutation.mutate({ id });
+  }, [markNotificationReadMutation]);
+
+  const markAllNotificationsRead = useCallback(() => {
+    if (!user) return;
+    markAllNotificationsReadMutation.mutate({ userId: user.id, role: user.role });
+  }, [user, markAllNotificationsReadMutation]);
 
   const getConversationMessages = useCallback((conversationId: string): ChatMessage[] => {
     return chatMessages.filter(m => m.conversationId === conversationId);
@@ -508,31 +296,31 @@ export const [DataProvider, useData] = createContextHook(() => {
     activeProperties,
     pendingProperties,
     myProperties,
-    approveProperty: approvePropertyMutation.mutateAsync,
-    rejectProperty: rejectPropertyMutation.mutateAsync,
-    addProperty: addPropertyMutation.mutateAsync,
-    updateProperty: updatePropertyMutation.mutateAsync,
-    deleteProperty: deletePropertyMutation.mutateAsync,
+    approveProperty,
+    rejectProperty,
+    addProperty,
+    updateProperty,
+    deleteProperty,
     conversations: userConversations,
     allConversations: conversations,
     getConversationMessages,
-    sendMessage: sendMessageMutation.mutateAsync,
-    startConversation: startConversationMutation.mutateAsync,
-    markConversationRead: markConversationReadMutation.mutate,
+    sendMessage,
+    startConversation,
+    markConversationRead,
     bookings: userBookings,
     allBookings: bookings,
-    createBooking: createBookingMutation.mutateAsync,
-    updateBooking: updateBookingMutation.mutateAsync,
+    createBooking,
+    updateBooking,
     notifications: userNotifications,
     allNotifications: notifications,
     unreadNotificationCount,
-    markNotificationRead: markNotificationReadMutation.mutate,
-    markAllNotificationsRead: markAllNotificationsReadMutation.mutate,
+    markNotificationRead,
+    markAllNotificationsRead,
     reviews,
     getPropertyReviews,
-    addReview: addReviewMutation.mutateAsync,
+    addReview,
     savedPropertyIds,
-    toggleSave: toggleSaveMutation.mutateAsync,
+    toggleSave,
     isSaved,
     isLoading: propertiesQuery.isLoading,
   };
