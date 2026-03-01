@@ -1,26 +1,29 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Alert, Animated, Platform, TextInput,
+  View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Alert, Animated, Platform, TextInput, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
-  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Phone, Calendar, ChevronRight, Check, Send,
+  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 
-const { width } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('window');
 
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { activeProperties, properties, isSaved, toggleSave, getPropertyReviews, addReview, startConversation, createBooking } = useData();
+  const { properties, isSaved, toggleSave, getPropertyReviews, addReview, startConversation, createBooking } = useData();
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+  const [showGallery, setShowGallery] = useState<boolean>(false);
+  const [galleryIndex, setGalleryIndex] = useState<number>(0);
   const [showReviewForm, setShowReviewForm] = useState<boolean>(false);
+  const galleryScrollRef = useRef<ScrollView>(null);
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>('');
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -30,6 +33,34 @@ export default function PropertyDetailScreen() {
   const saved = useMemo(() => isSaved(id ?? ''), [isSaved, id]);
 
   const handleBack = useCallback(() => router.back(), []);
+
+  const openGallery = useCallback((index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setGalleryIndex(index);
+    setShowGallery(true);
+    setTimeout(() => {
+      galleryScrollRef.current?.scrollTo({ x: index * width, animated: false });
+    }, 50);
+  }, []);
+
+  const handleGalleryScroll = useCallback((e: { nativeEvent: { contentOffset: { x: number } } }) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+    setGalleryIndex(idx);
+  }, []);
+
+  const goGalleryPrev = useCallback(() => {
+    if (!property) return;
+    const newIdx = Math.max(0, galleryIndex - 1);
+    setGalleryIndex(newIdx);
+    galleryScrollRef.current?.scrollTo({ x: newIdx * width, animated: true });
+  }, [galleryIndex, property]);
+
+  const goGalleryNext = useCallback(() => {
+    if (!property) return;
+    const newIdx = Math.min(property.images.length - 1, galleryIndex + 1);
+    setGalleryIndex(newIdx);
+    galleryScrollRef.current?.scrollTo({ x: newIdx * width, animated: true });
+  }, [galleryIndex, property]);
 
   const handleSave = useCallback(async () => {
     if (!id) return;
@@ -187,7 +218,9 @@ export default function PropertyDetailScreen() {
             onMomentumScrollEnd={(e) => setActiveImageIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
           >
             {property.images.map((img, idx) => (
-              <Image key={idx} source={{ uri: img }} style={styles.heroImage} contentFit="cover" transition={200} />
+              <Pressable key={idx} onPress={() => openGallery(idx)} testID={`hero-image-${idx}`}>
+                <Image source={{ uri: img }} style={styles.heroImage} contentFit="cover" transition={200} />
+              </Pressable>
             ))}
           </ScrollView>
           <SafeAreaView edges={['top']} style={styles.imageOverlay}>
@@ -205,12 +238,32 @@ export default function PropertyDetailScreen() {
               </Pressable>
             </View>
           </SafeAreaView>
-          <View style={styles.imageDots}>
-            {property.images.map((_, idx) => (
-              <View key={idx} style={[styles.dot, activeImageIndex === idx && styles.dotActive]} />
-            ))}
+          <View style={styles.imageDotsRow}>
+            <View style={styles.imageDots}>
+              {property.images.map((_, idx) => (
+                <View key={idx} style={[styles.dot, activeImageIndex === idx && styles.dotActive]} />
+              ))}
+            </View>
+            <View style={styles.imageCountBadge}>
+              <Text style={styles.imageCountText}>{activeImageIndex + 1}/{property.images.length}</Text>
+            </View>
           </View>
         </View>
+
+        {property.images.length > 1 && (
+          <View style={styles.thumbnailRow}>
+            {property.images.map((img, idx) => (
+              <Pressable
+                key={idx}
+                style={[styles.thumbnail, activeImageIndex === idx && styles.thumbnailActive]}
+                onPress={() => openGallery(idx)}
+                testID={`thumb-${idx}`}
+              >
+                <Image source={{ uri: img }} style={styles.thumbnailImage} contentFit="cover" />
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         <View style={styles.content}>
           <View style={styles.topRow}>
@@ -348,6 +401,52 @@ export default function PropertyDetailScreen() {
         </View>
       </ScrollView>
 
+      <Modal visible={showGallery} animationType="fade" transparent statusBarTranslucent>
+        <View style={styles.galleryOverlay}>
+          <SafeAreaView edges={['top']} style={styles.galleryHeader}>
+            <Pressable style={styles.galleryCloseBtn} onPress={() => setShowGallery(false)} testID="close-gallery">
+              <X size={24} color={Colors.white} />
+            </Pressable>
+            <Text style={styles.galleryCounter}>{galleryIndex + 1} / {property.images.length}</Text>
+            <View style={{ width: 40 }} />
+          </SafeAreaView>
+
+          <ScrollView
+            ref={galleryScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleGalleryScroll}
+            style={styles.galleryScroll}
+          >
+            {property.images.map((img, idx) => (
+              <View key={idx} style={styles.gallerySlide}>
+                <Image source={{ uri: img }} style={styles.galleryImage} contentFit="contain" />
+              </View>
+            ))}
+          </ScrollView>
+
+          {galleryIndex > 0 && (
+            <Pressable style={styles.galleryNavLeft} onPress={goGalleryPrev}>
+              <ChevronLeftIcon size={32} color={Colors.white} />
+            </Pressable>
+          )}
+          {property.images.length > 1 && galleryIndex < property.images.length - 1 && (
+            <Pressable style={styles.galleryNavRight} onPress={goGalleryNext}>
+              <ChevronRightIcon size={32} color={Colors.white} />
+            </Pressable>
+          )}
+
+          <SafeAreaView edges={['bottom']} style={styles.galleryFooter}>
+            <View style={styles.galleryDotsRow}>
+              {property.images.map((_, idx) => (
+                <View key={idx} style={[styles.galleryDot, galleryIndex === idx && styles.galleryDotActive]} />
+              ))}
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
       <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
         <View style={styles.bottomBarContent}>
           <View style={styles.bottomPrice}>
@@ -444,4 +543,24 @@ const styles = StyleSheet.create({
   scheduleText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
   contactButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primary },
   contactText: { fontSize: 14, fontWeight: '600' as const, color: Colors.white },
+  imageDotsRow: { position: 'absolute' as const, bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
+  imageCountBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  imageCountText: { color: Colors.white, fontSize: 12, fontWeight: '600' as const },
+  thumbnailRow: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  thumbnail: { flex: 1, height: 72, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
+  thumbnailActive: { borderColor: Colors.primary },
+  thumbnailImage: { width: '100%', height: '100%' },
+  galleryOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' },
+  galleryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
+  galleryCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  galleryCounter: { fontSize: 16, fontWeight: '600' as const, color: Colors.white },
+  galleryScroll: { flex: 1 },
+  gallerySlide: { width: width, justifyContent: 'center', alignItems: 'center' },
+  galleryImage: { width: width, height: screenHeight * 0.65 },
+  galleryNavLeft: { position: 'absolute' as const, left: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  galleryNavRight: { position: 'absolute' as const, right: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  galleryFooter: { alignItems: 'center', paddingVertical: 16 },
+  galleryDotsRow: { flexDirection: 'row', gap: 8 },
+  galleryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.3)' },
+  galleryDotActive: { backgroundColor: Colors.white, width: 24 },
 });

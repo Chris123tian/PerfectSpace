@@ -1,4 +1,4 @@
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { Home, Search, MessageCircle, User, Bell } from 'lucide-react-native';
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
@@ -18,11 +18,9 @@ export default function TabLayout() {
     );
   }
 
-  if (!user) {
-    return <Redirect href="/login" />;
-  }
 
-  const unreadMessages = conversations.reduce((count, c) => count + (c.unreadCount[user.id] ?? 0), 0);
+
+  const unreadMessages = user ? conversations.reduce((count, c) => count + (c.unreadCount[user.id] ?? 0), 0) : 0;
 
   return (
     <Tabs

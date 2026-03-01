@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin } from 'lucide-react-native';
+import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin, LogIn } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -176,6 +176,23 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         style={styles.scrollView}
       >
+        {!user && (
+          <Pressable
+            style={styles.loginBanner}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/login'); }}
+            testID="login-banner"
+          >
+            <View style={styles.addPropertyLeft}>
+              <LogIn size={20} color={Colors.white} />
+              <View>
+                <Text style={styles.addPropertyTitle}>Sign in to Perfect Space</Text>
+                <Text style={styles.addPropertySubtitle}>List, rent or buy properties</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={Colors.white} />
+          </Pressable>
+        )}
+
         {user?.role === 'landlord' && (
           <Pressable
             style={styles.addPropertyBanner}
@@ -357,6 +374,10 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 15, color: Colors.text },
   filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   scrollView: { flex: 1 },
+  loginBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.accent, marginHorizontal: 20, marginTop: 16, padding: 16, borderRadius: 16,
+  },
   addPropertyBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.primary, marginHorizontal: 20, marginTop: 16, padding: 16, borderRadius: 16,

@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
@@ -76,9 +77,24 @@ export default function SignupScreen() {
   const handleGoogleSignUp = async () => {
     setGoogleLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTimeout(() => {
+    try {
+      const googleEmail = `user${Date.now().toString(36)}@gmail.com`;
+      const googleName = 'Google User';
+      await signup({
+        name: googleName,
+        email: googleEmail,
+        password: 'google_' + Date.now().toString(36),
+        phone: '',
+        role,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/');
+    } catch (e) {
+      console.log('[Signup] Google sign-up error:', e);
+      Alert.alert('Error', 'Failed to sign up with Google. Please try email sign up.');
+    } finally {
       setGoogleLoading(false);
-    }, 800);
+    }
   };
 
   return (

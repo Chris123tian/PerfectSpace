@@ -204,7 +204,7 @@ export default function AddPropertyScreen() {
         rating: 0,
         reviewCount: 0,
         featured: false,
-        status: 'active',
+        status: 'pending',
         createdAt: new Date().toISOString().split('T')[0],
       };
 
@@ -212,7 +212,7 @@ export default function AddPropertyScreen() {
       await addProperty(newProperty);
       console.log('[AddProperty] Property added successfully');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Your property has been listed!', [
+      Alert.alert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e) {

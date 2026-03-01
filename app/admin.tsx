@@ -13,11 +13,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { User, Property } from '@/types/property';
 
-type AdminTab = 'overview' | 'users' | 'properties';
+type AdminTab = 'overview' | 'users' | 'properties' | 'pending';
 
 export default function AdminScreen() {
   const { user, getAllUsers, updateUserAdmin } = useAuth();
-  const { properties, allBookings, allNotifications, updateProperty, deleteProperty } = useData();
+  const { properties, pendingProperties, allBookings, allNotifications, updateProperty, deleteProperty, approveProperty, rejectProperty } = useData();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
@@ -40,6 +40,7 @@ export default function AdminScreen() {
     activeProperties: properties.filter(p => p.status === 'active').length,
     totalBookings: allBookings.length,
     pendingBookings: allBookings.filter(b => b.status === 'pending').length,
+    pendingProperties: pendingProperties.length,
     landlords: allUsers.filter(u => u.role === 'landlord').length,
     renters: allUsers.filter(u => u.role === 'renter').length,
     featuredProperties: properties.filter(p => p.featured).length,
@@ -79,6 +80,42 @@ export default function AdminScreen() {
       console.log('[Admin] Verify error:', e);
     }
   }, [updateUserAdmin, loadUsers]);
+
+  const handleApproveProperty = useCallback(async (property: Property) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert('Approve Property', `Approve "${property.title}" to go live?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Approve',
+        onPress: async () => {
+          try {
+            await approveProperty(property.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e) {
+            console.log('[Admin] Approve error:', e);
+          }
+        },
+      },
+    ]);
+  }, [approveProperty]);
+
+  const handleRejectProperty = useCallback(async (property: Property) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert('Reject Property', `Reject "${property.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject', style: 'destructive',
+        onPress: async () => {
+          try {
+            await rejectProperty(property.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e) {
+            console.log('[Admin] Reject error:', e);
+          }
+        },
+      },
+    ]);
+  }, [rejectProperty]);
 
   const handleToggleFeatured = useCallback(async (property: Property) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -147,7 +184,12 @@ export default function AdminScreen() {
         <View style={[styles.statCard, { backgroundColor: Colors.categoryOffice + '10' }]}>
           <TrendingUp size={24} color={Colors.categoryOffice} />
           <Text style={styles.statNumber}>{stats.pendingBookings}</Text>
-          <Text style={styles.statLabel}>Pending</Text>
+          <Text style={styles.statLabel}>Pending Bookings</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: Colors.warning + '10' }]}>
+          <Shield size={24} color={Colors.warning} />
+          <Text style={styles.statNumber}>{stats.pendingProperties}</Text>
+          <Text style={styles.statLabel}>Pending Approval</Text>
         </View>
       </View>
 
@@ -189,6 +231,13 @@ export default function AdminScreen() {
         <Text style={styles.quickActionText}>Manage Users</Text>
         <ChevronRight size={18} color={Colors.textLight} />
       </Pressable>
+      {stats.pendingProperties > 0 && (
+        <Pressable style={[styles.quickAction, { borderLeftWidth: 3, borderLeftColor: Colors.warning }]} onPress={() => setActiveTab('pending')}>
+          <Shield size={20} color={Colors.warning} />
+          <Text style={styles.quickActionText}>Review Pending Properties ({stats.pendingProperties})</Text>
+          <ChevronRight size={18} color={Colors.textLight} />
+        </Pressable>
+      )}
       <Pressable style={styles.quickAction} onPress={() => setActiveTab('properties')}>
         <Building2 size={20} color={Colors.accent} />
         <Text style={styles.quickActionText}>Manage Properties</Text>
@@ -242,6 +291,49 @@ export default function AdminScreen() {
     />
   );
 
+  const renderPending = () => (
+    <FlatList
+      data={pendingProperties}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={styles.tabContent}
+      ListEmptyComponent={
+        <View style={styles.emptyPending}>
+          <Shield size={48} color={Colors.success} />
+          <Text style={styles.emptyPendingTitle}>All caught up!</Text>
+          <Text style={styles.emptyPendingSubtitle}>No properties waiting for approval</Text>
+        </View>
+      }
+      renderItem={({ item: p }) => (
+        <View style={styles.pendingCard}>
+          <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
+            <Image source={{ uri: p.images[0] }} style={styles.pendingImage} />
+            <View style={styles.propInfo}>
+              <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
+              <Text style={styles.propOwner}>by {p.ownerName}</Text>
+              <Text style={styles.propPrice}>{p.currency}{p.price.toLocaleString()}{p.period ?? ''}</Text>
+              <Text style={styles.pendingDate}>Submitted {p.createdAt}</Text>
+            </View>
+          </Pressable>
+          <View style={styles.pendingImages}>
+            {p.images.slice(0, 3).map((img, idx) => (
+              <Image key={idx} source={{ uri: img }} style={styles.pendingThumb} contentFit="cover" />
+            ))}
+          </View>
+          <View style={styles.pendingActions}>
+            <Pressable style={styles.rejectBtn} onPress={() => handleRejectProperty(p)} testID={`reject-${p.id}`}>
+              <ShieldOff size={16} color={Colors.error} />
+              <Text style={styles.rejectBtnText}>Reject</Text>
+            </Pressable>
+            <Pressable style={styles.approveBtn} onPress={() => handleApproveProperty(p)} testID={`approve-${p.id}`}>
+              <Shield size={16} color={Colors.white} />
+              <Text style={styles.approveBtnText}>Approve</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+    />
+  );
+
   const renderProperties = () => (
     <FlatList
       data={properties}
@@ -289,17 +381,25 @@ export default function AdminScreen() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.tabBar}>
-          {(['overview', 'users', 'properties'] as AdminTab[]).map(tab => (
+          {(['overview', 'pending', 'users', 'properties'] as AdminTab[]).map(tab => (
             <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users') loadUsers(); }}>
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
+              <View style={styles.tabInner}>
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                  {tab === 'pending' ? 'Pending' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </Text>
+                {tab === 'pending' && pendingProperties.length > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{pendingProperties.length}</Text>
+                  </View>
+                )}
+              </View>
             </Pressable>
           ))}
         </View>
       </SafeAreaView>
 
       {activeTab === 'overview' && renderOverview()}
+      {activeTab === 'pending' && renderPending()}
       {activeTab === 'users' && renderUsers()}
       {activeTab === 'properties' && renderProperties()}
     </View>
@@ -356,4 +456,20 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '600' as const },
   propActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: Colors.borderLight, padding: 8, gap: 8 },
   propActionBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.background, alignItems: 'center' },
+  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tabBadge: { backgroundColor: Colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  tabBadgeText: { color: Colors.white, fontSize: 9, fontWeight: '700' as const },
+  emptyPending: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyPendingTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
+  emptyPendingSubtitle: { fontSize: 14, color: Colors.textSecondary },
+  pendingCard: { backgroundColor: Colors.white, borderRadius: 14, overflow: 'hidden', marginBottom: 12, borderLeftWidth: 3, borderLeftColor: Colors.warning },
+  pendingImage: { width: 70, height: 70, borderRadius: 10 },
+  pendingDate: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
+  pendingImages: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 10, gap: 6 },
+  pendingThumb: { width: 80, height: 56, borderRadius: 8 },
+  pendingActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: Colors.borderLight, padding: 10, gap: 10 },
+  rejectBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.error + '10' },
+  rejectBtnText: { fontSize: 14, fontWeight: '600' as const, color: Colors.error },
+  approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.success },
+  approveBtnText: { fontSize: 14, fontWeight: '600' as const, color: Colors.white },
 });

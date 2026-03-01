@@ -125,6 +125,11 @@ export const [DataProvider, useData] = createContextHook(() => {
     [properties]
   );
 
+  const pendingProperties = useMemo(
+    () => properties.filter(p => p.status === 'pending'),
+    [properties]
+  );
+
   const addPropertyMutation = useMutation({
     mutationFn: async (property: Property) => {
       console.log('[Data] Adding property:', property.title);
@@ -147,6 +152,70 @@ export const [DataProvider, useData] = createContextHook(() => {
       if (idx === -1) throw new Error('Property not found');
       current[idx] = { ...current[idx], ...updates };
       await save(PROPERTIES_KEY, current);
+      return current;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['properties'], data);
+    },
+  });
+
+  const approvePropertyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      console.log('[Data] Approving property:', id);
+      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
+      const idx = current.findIndex(p => p.id === id);
+      if (idx === -1) throw new Error('Property not found');
+      current[idx] = { ...current[idx], status: 'active' };
+      await save(PROPERTIES_KEY, current);
+
+      const prop = current[idx];
+      const notif: AppNotification = {
+        id: 'n_' + Date.now().toString(36),
+        userId: prop.ownerId,
+        title: 'Property Approved',
+        message: `Your property "${prop.title}" has been approved and is now live!`,
+        type: 'property',
+        read: false,
+        createdAt: new Date().toISOString(),
+        data: { propertyId: id },
+      };
+      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
+      const updatedNotifs = [notif, ...notifs];
+      await save(NOTIFICATIONS_KEY, updatedNotifs);
+      queryClient.setQueryData(['notifications'], updatedNotifs);
+
+      return current;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['properties'], data);
+    },
+  });
+
+  const rejectPropertyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      console.log('[Data] Rejecting property:', id);
+      const current = await loadOrSeed<Property>(PROPERTIES_KEY, seedProperties);
+      const idx = current.findIndex(p => p.id === id);
+      if (idx === -1) throw new Error('Property not found');
+      current[idx] = { ...current[idx], status: 'rejected' };
+      await save(PROPERTIES_KEY, current);
+
+      const prop = current[idx];
+      const notif: AppNotification = {
+        id: 'n_' + Date.now().toString(36),
+        userId: prop.ownerId,
+        title: 'Property Rejected',
+        message: `Your property "${prop.title}" was not approved. Please review and resubmit.`,
+        type: 'property',
+        read: false,
+        createdAt: new Date().toISOString(),
+        data: { propertyId: id },
+      };
+      const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
+      const updatedNotifs = [notif, ...notifs];
+      await save(NOTIFICATIONS_KEY, updatedNotifs);
+      queryClient.setQueryData(['notifications'], updatedNotifs);
+
       return current;
     },
     onSuccess: (data) => {
@@ -437,7 +506,10 @@ export const [DataProvider, useData] = createContextHook(() => {
   return {
     properties,
     activeProperties,
+    pendingProperties,
     myProperties,
+    approveProperty: approvePropertyMutation.mutateAsync,
+    rejectProperty: rejectPropertyMutation.mutateAsync,
     addProperty: addPropertyMutation.mutateAsync,
     updateProperty: updatePropertyMutation.mutateAsync,
     deleteProperty: deletePropertyMutation.mutateAsync,

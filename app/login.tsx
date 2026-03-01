@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
@@ -19,7 +20,7 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
-  const { login, loginPending, loginError, resetLoginError, isAuthenticated } = useAuth();
+  const { login, signup, loginPending, loginError, resetLoginError, isAuthenticated } = useAuth();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -70,10 +71,31 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTimeout(() => {
+    try {
+      const googleEmail = `user${Date.now().toString(36)}@gmail.com`;
+      const googleName = 'Google User';
+      await signup({
+        name: googleName,
+        email: googleEmail,
+        password: 'google_' + Date.now().toString(36),
+        phone: '',
+        role: 'renter',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/');
+    } catch (e) {
+      console.log('[Login] Google sign-in error:', e);
+      Alert.alert(
+        'Google Sign-In',
+        'To use Google Sign-In, please create an account first with your email, or sign in with existing credentials.',
+        [
+          { text: 'Sign Up', onPress: () => router.push('/signup') },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    } finally {
       setGoogleLoading(false);
-      router.push('/signup');
-    }, 800);
+    }
   };
 
   return (
