@@ -184,9 +184,9 @@ export default function SettingsScreen() {
           </Pressable>
           {showPrivacy && (
             <View style={styles.privacyContent}>
-              <Text style={styles.privacyTitle}>PropertyHub Privacy Policy</Text>
+              <Text style={styles.privacyTitle}>Perfect Space Privacy Policy</Text>
               <Text style={styles.privacyText}>
-                {`1. Data Collection\nWe collect information you provide when creating an account, listing properties, and communicating with other users.\n\n2. Data Usage\nYour data is used to provide and improve our services, connect renters with property owners, and personalize your experience.\n\n3. Data Storage\nAll data is stored securely on your device. We do not share your personal information with third parties without your consent.\n\n4. Your Rights\n• Access your personal data at any time\n• Request data deletion via account settings\n• Opt out of notifications\n• Update or correct your information\n\n5. Communication\nWe may send notifications about bookings, messages, and platform updates. You can manage these in notification settings.\n\n6. Contact Us\nFor privacy concerns, contact support@propertyhub.com`}
+                {`1. Data Collection\nWe collect information you provide when creating an account, listing properties, and communicating with other users.\n\n2. Data Usage\nYour data is used to provide and improve our services, connect renters with property owners, and personalize your experience.\n\n3. Data Storage\nAll data is stored securely on your device. We do not share your personal information with third parties without your consent.\n\n4. Your Rights\n• Access your personal data at any time\n• Request data deletion via account settings\n• Opt out of notifications\n• Update or correct your information\n\n5. Communication\nWe may send notifications about bookings, messages, and platform updates. You can manage these in notification settings.\n\n6. Contact Us\nFor privacy concerns, contact support@perfectspace.com`}
               </Text>
             </View>
           )}
@@ -194,11 +194,11 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
-          <Pressable style={styles.settingRow} onPress={() => Alert.alert('PropertyHub v1.0.0', 'A modern property rental and sales platform.\n\nBuilt for property owners and renters to connect, list, and discover properties with ease.')}>
+          <Pressable style={styles.settingRow} onPress={() => Alert.alert('Perfect Space v1.0.0', 'A modern property rental and sales platform.\n\nBuilt for property owners and renters to connect, list, and discover properties with ease.')}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Info size={18} color={Colors.textSecondary} /></View>
               <View>
-                <Text style={styles.settingLabel}>About PropertyHub</Text>
+                <Text style={styles.settingLabel}>About Perfect Space</Text>
                 <Text style={styles.settingDesc}>Version 1.0.0</Text>
               </View>
             </View>

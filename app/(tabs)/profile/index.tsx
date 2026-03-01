@@ -1,10 +1,10 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import {
   Settings, ChevronRight, Heart, Star, Shield, Bell, HelpCircle, LogOut,
-  Home, BadgeCheck, FileText, Phone, Calendar, Plus, BarChart3, Users, ShieldCheck,
+  Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -25,7 +25,6 @@ interface MenuItem {
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { myProperties, bookings, savedPropertyIds, unreadNotificationCount } = useData();
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
 
   const handleLogout = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -91,7 +90,7 @@ export default function ProfileScreen() {
     {
       title: 'Support',
       items: [
-        { id: 'help', icon: <HelpCircle size={20} color={Colors.textSecondary} />, label: 'Help Center', action: () => Alert.alert('Help', 'Contact us at support@propertyhub.com'), showArrow: true },
+        { id: 'help', icon: <HelpCircle size={20} color={Colors.textSecondary} />, label: 'Help Center', action: () => Alert.alert('Help', 'Contact us at support@perfectspace.com'), showArrow: true },
         { id: 'settings', icon: <Settings size={20} color={Colors.textSecondary} />, label: 'Settings', action: () => router.push('/settings'), showArrow: true },
       ],
     }
@@ -186,7 +185,7 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>
 
-        <Text style={styles.versionText}>PropertyHub v1.0.0</Text>
+        <Text style={styles.versionText}>Perfect Space v1.0.0</Text>
         <View style={styles.bottomSpacer} />
       </ScrollView>
     </View>

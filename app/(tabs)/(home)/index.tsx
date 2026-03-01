@@ -137,7 +137,7 @@ export default function HomeScreen() {
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
-              <Text style={styles.greetingBold}>Find your Perfect Space</Text>
+              <Text style={styles.greetingBold}>Perfect Space</Text>
             </View>
             <Pressable onPress={() => router.push('/(tabs)/profile')} testID="header-avatar">
               <Image

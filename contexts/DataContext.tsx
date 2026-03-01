@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
@@ -34,46 +34,55 @@ export const [DataProvider, useData] = createContextHook(() => {
   const propertiesQuery = useQuery({
     queryKey: ['properties'],
     queryFn: () => loadOrSeed<Property>(PROPERTIES_KEY, seedProperties),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const conversationsQuery = useQuery({
     queryKey: ['conversations'],
     queryFn: () => loadOrSeed<Conversation>(CONVERSATIONS_KEY, seedConversations),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const messagesQuery = useQuery({
     queryKey: ['chatMessages'],
     queryFn: () => loadOrSeed<ChatMessage>(MESSAGES_KEY, seedChatMessages),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const bookingsQuery = useQuery({
     queryKey: ['bookings'],
     queryFn: () => loadOrSeed<Booking>(BOOKINGS_KEY, seedBookings),
-    refetchInterval: 10000,
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const notificationsQuery = useQuery({
     queryKey: ['notifications'],
     queryFn: () => loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const reviewsQuery = useQuery({
     queryKey: ['reviews'],
     queryFn: () => loadOrSeed<Review>(REVIEWS_KEY, seedReviews),
-    refetchInterval: 10000,
+    refetchInterval: 5000,
+    staleTime: 2000,
   });
 
+  const userId = user?.id;
   const savedQuery = useQuery({
-    queryKey: ['savedProperties', user?.id],
+    queryKey: ['savedProperties', userId],
     queryFn: async () => {
-      if (!user) return [];
-      const stored = await AsyncStorage.getItem(`${SAVED_KEY}_${user.id}`);
+      if (!userId) return [];
+      const stored = await AsyncStorage.getItem(`${SAVED_KEY}_${userId}`);
       return stored ? JSON.parse(stored) as string[] : [];
     },
-    enabled: !!user,
+    enabled: !!userId,
+    refetchInterval: 5000,
   });
 
   const properties = useMemo(() => propertiesQuery.data ?? [], [propertiesQuery.data]);
@@ -125,9 +134,8 @@ export const [DataProvider, useData] = createContextHook(() => {
       return updated;
     },
     onSuccess: (data) => {
-      console.log('[Data] Property added, updating cache with', data.length, 'properties');
+      console.log('[Data] Property added, total:', data.length);
       queryClient.setQueryData(['properties'], data);
-      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 
@@ -143,7 +151,6 @@ export const [DataProvider, useData] = createContextHook(() => {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['properties'], data);
-      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 
@@ -157,7 +164,6 @@ export const [DataProvider, useData] = createContextHook(() => {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['properties'], data);
-      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 
@@ -262,10 +268,11 @@ export const [DataProvider, useData] = createContextHook(() => {
       await save(CONVERSATIONS_KEY, updatedConvs);
 
       const msgs = await loadOrSeed<ChatMessage>(MESSAGES_KEY, seedChatMessages);
-      await save(MESSAGES_KEY, [...msgs, newMsg]);
+      const updatedMsgs = [...msgs, newMsg];
+      await save(MESSAGES_KEY, updatedMsgs);
 
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['chatMessages'] });
+      queryClient.setQueryData(['conversations'], updatedConvs);
+      queryClient.setQueryData(['chatMessages'], updatedMsgs);
 
       return newConv.id;
     },
@@ -305,8 +312,9 @@ export const [DataProvider, useData] = createContextHook(() => {
         data: { bookingId: booking.id },
       };
       const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      await save(NOTIFICATIONS_KEY, [notif, ...notifs]);
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      const updatedNotifs = [notif, ...notifs];
+      await save(NOTIFICATIONS_KEY, updatedNotifs);
+      queryClient.setQueryData(['notifications'], updatedNotifs);
       return updated;
     },
     onSuccess: (data) => {
@@ -336,8 +344,9 @@ export const [DataProvider, useData] = createContextHook(() => {
         data: { bookingId: id },
       };
       const notifs = await loadOrSeed<AppNotification>(NOTIFICATIONS_KEY, seedNotifications);
-      await save(NOTIFICATIONS_KEY, [notif, ...notifs]);
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      const updatedNotifs = [notif, ...notifs];
+      await save(NOTIFICATIONS_KEY, updatedNotifs);
+      queryClient.setQueryData(['notifications'], updatedNotifs);
       return current;
     },
     onSuccess: (data) => {

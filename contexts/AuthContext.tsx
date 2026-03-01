@@ -75,7 +75,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face',
         phone: params.phone,
         role: params.role === 'admin' ? 'renter' : params.role,
-        bio: params.role === 'landlord' ? 'Property owner on PropertyHub.' : 'Looking for the perfect space.',
+        bio: params.role === 'landlord' ? 'Property owner on Perfect Space.' : 'Looking for the perfect space.',
         propertiesCount: 0,
         reviewsCount: 0,
         rating: 0,

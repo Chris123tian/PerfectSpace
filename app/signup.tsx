@@ -28,6 +28,7 @@ export default function SignupScreen() {
   const [role, setRole] = useState<UserRole>('renter');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   if (isAuthenticated) {
@@ -72,6 +73,14 @@ export default function SignupScreen() {
     }
   };
 
+  const handleGoogleSignUp = async () => {
+    setGoogleLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTimeout(() => {
+      setGoogleLoading(false);
+    }, 800);
+  };
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -86,7 +95,7 @@ export default function SignupScreen() {
             </View>
 
             <Animated.View style={[styles.formSection, { transform: [{ translateX: shakeAnim }] }]}>
-              <Text style={styles.title}>Join PropertyHub</Text>
+              <Text style={styles.title}>Join Perfect Space</Text>
               <Text style={styles.subtitle}>Choose your role to get started</Text>
 
               <View style={styles.roleRow}>
@@ -108,6 +117,30 @@ export default function SignupScreen() {
                   <Text style={[styles.roleLabel, role === 'landlord' && styles.roleLabelActive]}>Landlord</Text>
                   <Text style={styles.roleDesc}>List properties</Text>
                 </Pressable>
+              </View>
+
+              <Pressable
+                style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+                onPress={handleGoogleSignUp}
+                disabled={googleLoading}
+                testID="google-signup"
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={Colors.text} />
+                ) : (
+                  <>
+                    <View style={styles.googleIconContainer}>
+                      <Text style={styles.googleIconG}>G</Text>
+                    </View>
+                    <Text style={styles.googleButtonText}>Sign up with Google</Text>
+                  </>
+                )}
+              </Pressable>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or sign up with email</Text>
+                <View style={styles.dividerLine} />
               </View>
 
               {signupError && (
@@ -269,7 +302,7 @@ const styles = StyleSheet.create({
   roleRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   roleCard: {
     flex: 1,
@@ -296,6 +329,55 @@ const styles = StyleSheet.create({
   roleDesc: {
     fontSize: 12,
     color: Colors.textLight,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  googleButtonDisabled: {
+    opacity: 0.7,
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconG: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    fontSize: 13,
+    color: Colors.textLight,
+    fontWeight: '500' as const,
   },
   errorBanner: {
     backgroundColor: Colors.error + '12',

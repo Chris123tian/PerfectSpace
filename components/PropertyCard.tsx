@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Pressable,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Star, MapPin, Bed, Bath, Maximize } from 'lucide-react-native';
@@ -14,9 +14,6 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { Property } from '@/types/property';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width - 40;
-
 interface PropertyCardProps {
   property: Property;
   compact?: boolean;
@@ -24,6 +21,8 @@ interface PropertyCardProps {
 
 function PropertyCard({ property, compact = false }: PropertyCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const { width: screenWidth } = useWindowDimensions();
+  const isWide = screenWidth > 600;
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
@@ -106,11 +105,15 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
       onPressOut={handlePressOut}
       testID={`property-card-${property.id}`}
     >
-      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
-        <View style={styles.imageContainer}>
+      <Animated.View style={[
+        styles.card,
+        isWide && styles.cardWide,
+        { transform: [{ scale: scaleAnim }] },
+      ]}>
+        <View style={[styles.imageContainer, isWide && styles.imageContainerWide]}>
           <Image
             source={{ uri: property.images[0] }}
-            style={styles.image}
+            style={[styles.image, isWide && styles.imageWide]}
             contentFit="cover"
             transition={300}
           />
@@ -134,7 +137,7 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
           )}
         </View>
 
-        <View style={styles.info}>
+        <View style={[styles.info, isWide && styles.infoWide]}>
           <View style={styles.priceRow}>
             <Text style={styles.price}>
               {property.currency}{formatPrice(property.price)}
@@ -193,12 +196,25 @@ const styles = StyleSheet.create({
     elevation: 4,
     overflow: 'hidden',
   },
+  cardWide: {
+    flexDirection: 'row',
+    maxWidth: 800,
+    alignSelf: 'center',
+    width: '100%',
+  },
   imageContainer: {
     position: 'relative',
+  },
+  imageContainerWide: {
+    width: '40%',
   },
   image: {
     width: '100%',
     height: 200,
+  },
+  imageWide: {
+    height: '100%',
+    minHeight: 200,
   },
   imageOverlay: {
     position: 'absolute',
@@ -222,7 +238,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start' as const,
   },
   typeBadgeTextSmall: {
     fontSize: 10,
@@ -258,6 +274,10 @@ const styles = StyleSheet.create({
   },
   info: {
     padding: 16,
+  },
+  infoWide: {
+    flex: 1,
+    justifyContent: 'center',
   },
   priceRow: {
     flexDirection: 'row',
@@ -312,6 +332,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
+    flexWrap: 'wrap',
   },
   stat: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   if (isAuthenticated) {
@@ -66,15 +67,13 @@ export default function LoginScreen() {
     }
   };
 
-  const handleDemoLogin = async (demoEmail: string) => {
-    resetLoginError();
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await login({ email: demoEmail, password: 'password123' });
-      router.replace('/');
-    } catch {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
+    setTimeout(() => {
+      setGoogleLoading(false);
+      router.push('/signup');
+    }, 800);
   };
 
   return (
@@ -93,7 +92,7 @@ export default function LoginScreen() {
               <View style={styles.logoContainer}>
                 <Building2 size={36} color={Colors.white} />
               </View>
-              <Text style={styles.appName}>PropertyHub</Text>
+              <Text style={styles.appName}>Perfect Space</Text>
               <Text style={styles.tagline}>Find your perfect space</Text>
             </View>
 
@@ -161,24 +160,30 @@ export default function LoginScreen() {
 
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or try a demo</Text>
+                <Text style={styles.dividerText}>or continue with</Text>
                 <View style={styles.dividerLine} />
               </View>
 
-              <View style={styles.demoButtons}>
-                <Pressable style={styles.demoButton} onPress={() => handleDemoLogin('alex@email.com')} testID="demo-renter">
-                  <Text style={styles.demoButtonText}>Renter Demo</Text>
-                </Pressable>
-                <Pressable style={styles.demoButton} onPress={() => handleDemoLogin('sarah@email.com')} testID="demo-landlord">
-                  <Text style={styles.demoButtonText}>Landlord Demo</Text>
-                </Pressable>
-                <Pressable style={[styles.demoButton, styles.demoButtonAdmin]} onPress={() => handleDemoLogin('admin@propertyhub.com')} testID="demo-admin">
-                  <Text style={[styles.demoButtonText, styles.demoButtonAdminText]}>Admin Demo</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                testID="google-signin"
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={Colors.text} />
+                ) : (
+                  <>
+                    <View style={styles.googleIconContainer}>
+                      <Text style={styles.googleIconG}>G</Text>
+                    </View>
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  </>
+                )}
+              </Pressable>
 
               <View style={styles.signupRow}>
-                <Text style={styles.signupText}>Don't have an account? </Text>
+                <Text style={styles.signupText}>Don{"'"}t have an account? </Text>
                 <Pressable onPress={() => router.push('/signup')} testID="go-signup">
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </Pressable>
@@ -346,28 +351,38 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     fontWeight: '500' as const,
   },
-  demoButtons: {
+  googleButton: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
     marginBottom: 24,
   },
-  demoButton: {
-    flex: 1,
-    paddingVertical: 12,
+  googleButtonDisabled: {
+    opacity: 0.7,
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: Colors.white,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  demoButtonText: {
-    fontSize: 13,
+  googleIconG: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
-  demoButtonAdmin: {
-    backgroundColor: Colors.text,
-  },
-  demoButtonAdminText: {
-    color: Colors.white,
+    color: Colors.text,
   },
   signupRow: {
     flexDirection: 'row',
