@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import {
-  ArrowLeft, Users, Building2, Calendar, BarChart3, Shield, ShieldOff,
+  ArrowLeft, Users, Building2, Calendar, Shield, ShieldOff,
   Trash2, Star, Eye, ChevronRight, TrendingUp, UserCheck, UserX,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -17,13 +17,9 @@ type AdminTab = 'overview' | 'users' | 'properties' | 'pending';
 
 export default function AdminScreen() {
   const { user, getAllUsers, updateUserAdmin } = useAuth();
-  const { properties, pendingProperties, allBookings, allNotifications, updateProperty, deleteProperty, approveProperty, rejectProperty } = useData();
+  const { properties, pendingProperties, allBookings, updateProperty, deleteProperty, approveProperty, rejectProperty } = useData();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [allUsers, setAllUsers] = useState<User[]>([]);
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -34,20 +30,24 @@ export default function AdminScreen() {
     }
   }, [getAllUsers]);
 
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
+
   const stats = useMemo(() => ({
     totalUsers: allUsers.length,
     totalProperties: properties.length,
     activeProperties: properties.filter(p => p.status === 'active').length,
     totalBookings: allBookings.length,
     pendingBookings: allBookings.filter(b => b.status === 'pending').length,
-    pendingProperties: pendingProperties.length,
+    pendingProps: pendingProperties.length,
     landlords: allUsers.filter(u => u.role === 'landlord').length,
     renters: allUsers.filter(u => u.role === 'renter').length,
     featuredProperties: properties.filter(p => p.featured).length,
-  }), [allUsers, properties, allBookings]);
+  }), [allUsers, properties, allBookings, pendingProperties.length]);
 
   const handleToggleUserActive = useCallback(async (targetUser: User) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const action = targetUser.isActive ? 'deactivate' : 'activate';
     Alert.alert(
       `${action.charAt(0).toUpperCase() + action.slice(1)} User`,
@@ -61,7 +61,7 @@ export default function AdminScreen() {
             try {
               await updateUserAdmin(targetUser.id, { isActive: !targetUser.isActive });
               await loadUsers();
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (e) {
               console.log('[Admin] Toggle user error:', e);
             }
@@ -72,7 +72,7 @@ export default function AdminScreen() {
   }, [updateUserAdmin, loadUsers]);
 
   const handleToggleVerified = useCallback(async (targetUser: User) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await updateUserAdmin(targetUser.id, { verified: !targetUser.verified });
       await loadUsers();
@@ -82,7 +82,7 @@ export default function AdminScreen() {
   }, [updateUserAdmin, loadUsers]);
 
   const handleApproveProperty = useCallback(async (property: Property) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert('Approve Property', `Approve "${property.title}" to go live?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -90,7 +90,7 @@ export default function AdminScreen() {
         onPress: async () => {
           try {
             await approveProperty(property.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           } catch (e) {
             console.log('[Admin] Approve error:', e);
           }
@@ -100,7 +100,7 @@ export default function AdminScreen() {
   }, [approveProperty]);
 
   const handleRejectProperty = useCallback(async (property: Property) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert('Reject Property', `Reject "${property.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -108,7 +108,7 @@ export default function AdminScreen() {
         onPress: async () => {
           try {
             await rejectProperty(property.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           } catch (e) {
             console.log('[Admin] Reject error:', e);
           }
@@ -118,7 +118,7 @@ export default function AdminScreen() {
   }, [rejectProperty]);
 
   const handleToggleFeatured = useCallback(async (property: Property) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await updateProperty({ id: property.id, updates: { featured: !property.featured } });
     } catch (e) {
@@ -127,7 +127,7 @@ export default function AdminScreen() {
   }, [updateProperty]);
 
   const handleDeleteProperty = useCallback(async (property: Property) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert('Delete Property', `Delete "${property.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -135,7 +135,7 @@ export default function AdminScreen() {
         onPress: async () => {
           try {
             await deleteProperty(property.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           } catch (e) {
             console.log('[Admin] Delete error:', e);
           }
@@ -188,7 +188,7 @@ export default function AdminScreen() {
         </View>
         <View style={[styles.statCard, { backgroundColor: Colors.warning + '10' }]}>
           <Shield size={24} color={Colors.warning} />
-          <Text style={styles.statNumber}>{stats.pendingProperties}</Text>
+          <Text style={styles.statNumber}>{stats.pendingProps}</Text>
           <Text style={styles.statLabel}>Pending Approval</Text>
         </View>
       </View>
@@ -231,10 +231,10 @@ export default function AdminScreen() {
         <Text style={styles.quickActionText}>Manage Users</Text>
         <ChevronRight size={18} color={Colors.textLight} />
       </Pressable>
-      {stats.pendingProperties > 0 && (
+      {stats.pendingProps > 0 && (
         <Pressable style={[styles.quickAction, { borderLeftWidth: 3, borderLeftColor: Colors.warning }]} onPress={() => setActiveTab('pending')}>
           <Shield size={20} color={Colors.warning} />
-          <Text style={styles.quickActionText}>Review Pending Properties ({stats.pendingProperties})</Text>
+          <Text style={styles.quickActionText}>Review Pending Properties ({stats.pendingProps})</Text>
           <ChevronRight size={18} color={Colors.textLight} />
         </Pressable>
       )}
@@ -382,7 +382,7 @@ export default function AdminScreen() {
         </View>
         <View style={styles.tabBar}>
           {(['overview', 'pending', 'users', 'properties'] as AdminTab[]).map(tab => (
-            <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users') loadUsers(); }}>
+            <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users') void loadUsers(); }}>
               <View style={styles.tabInner}>
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab === 'pending' ? 'Pending' : tab.charAt(0).toUpperCase() + tab.slice(1)}

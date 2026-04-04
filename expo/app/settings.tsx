@@ -4,15 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, ChevronRight, Bell, Lock, Globe, Trash2, Info, Shield, Moon, Eye, EyeOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 
 export default function SettingsScreen() {
-  const { user, logout, updateProfile } = useAuth();
-  const [pushEnabled, setPushEnabled] = useState<boolean>(true);
-  const [emailEnabled, setEmailEnabled] = useState<boolean>(true);
-  const [darkMode, setDarkMode] = useState<boolean>(false);
+  const { user, updateProfile, updateSettings, deleteAccount, deleteAccountPending } = useAuth();
   const [showPasswordForm, setShowPasswordForm] = useState<boolean>(false);
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -20,6 +17,46 @@ export default function SettingsScreen() {
   const [showCurrent, setShowCurrent] = useState<boolean>(false);
   const [showNew, setShowNew] = useState<boolean>(false);
   const [showPrivacy, setShowPrivacy] = useState<boolean>(false);
+
+  const userId = user?.id ?? '';
+  const settingsQuery = trpc.auth.getSettings.useQuery(
+    { userId },
+    { enabled: !!userId, refetchInterval: 5000 }
+  );
+
+  const pushEnabled = settingsQuery.data?.pushEnabled ?? true;
+  const emailEnabled = settingsQuery.data?.emailEnabled ?? true;
+  const darkMode = settingsQuery.data?.darkMode ?? false;
+
+  const handleTogglePush = useCallback(async (v: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await updateSettings({ pushEnabled: v });
+    } catch (e) {
+      console.log('[Settings] Push toggle error:', e);
+    }
+  }, [updateSettings]);
+
+  const handleToggleEmail = useCallback(async (v: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await updateSettings({ emailEnabled: v });
+    } catch (e) {
+      console.log('[Settings] Email toggle error:', e);
+    }
+  }, [updateSettings]);
+
+  const handleToggleDarkMode = useCallback(async (v: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await updateSettings({ darkMode: v });
+      if (v) {
+        Alert.alert('Dark Mode', 'Dark mode preference saved. Full dark mode support coming soon.');
+      }
+    } catch (e) {
+      console.log('[Settings] Dark mode toggle error:', e);
+    }
+  }, [updateSettings]);
 
   const handleChangePassword = useCallback(async () => {
     if (!currentPassword.trim()) {
@@ -39,10 +76,10 @@ export default function SettingsScreen() {
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await updateProfile({ password: newPassword } as any);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Your password has been updated.');
       setShowPasswordForm(false);
       setCurrentPassword('');
@@ -55,19 +92,23 @@ export default function SettingsScreen() {
   }, [currentPassword, newPassword, confirmPassword, user?.password, updateProfile]);
 
   const handleDeleteAccount = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data will be lost.', [
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data, properties, and conversations will be permanently deleted.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.clear();
-          logout();
-          router.replace('/login');
+          try {
+            await deleteAccount();
+            router.replace('/login');
+          } catch (e) {
+            console.log('[Settings] Delete account error:', e);
+            Alert.alert('Error', 'Failed to delete account. Please try again.');
+          }
         },
       },
     ]);
-  }, [logout]);
+  }, [deleteAccount]);
 
   return (
     <View style={styles.container}>
@@ -92,7 +133,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingDesc}>Receive alerts on your device</Text>
               </View>
             </View>
-            <Switch value={pushEnabled} onValueChange={(v) => { setPushEnabled(v); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={pushEnabled ? Colors.primary : Colors.textLight} />
+            <Switch value={pushEnabled} onValueChange={handleTogglePush} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={pushEnabled ? Colors.primary : Colors.textLight} />
           </View>
           <View style={styles.divider} />
           <View style={styles.settingRow}>
@@ -103,7 +144,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingDesc}>Receive updates via email</Text>
               </View>
             </View>
-            <Switch value={emailEnabled} onValueChange={(v) => { setEmailEnabled(v); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={emailEnabled ? Colors.primary : Colors.textLight} />
+            <Switch value={emailEnabled} onValueChange={handleToggleEmail} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={emailEnabled ? Colors.primary : Colors.textLight} />
           </View>
         </View>
 
@@ -117,13 +158,13 @@ export default function SettingsScreen() {
                 <Text style={styles.settingDesc}>{darkMode ? 'Enabled' : 'Light theme active'}</Text>
               </View>
             </View>
-            <Switch value={darkMode} onValueChange={(v) => { setDarkMode(v); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); if (v) { Alert.alert('Dark Mode', 'Dark mode has been enabled. Some screens may not fully support dark mode yet.'); } }} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={darkMode ? Colors.primary : Colors.textLight} />
+            <Switch value={darkMode} onValueChange={handleToggleDarkMode} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={darkMode ? Colors.primary : Colors.textLight} />
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Security</Text>
         <View style={styles.card}>
-          <Pressable style={styles.settingRow} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPasswordForm(!showPasswordForm); }}>
+          <Pressable style={styles.settingRow} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPasswordForm(!showPasswordForm); }}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Lock size={18} color={Colors.success} /></View>
               <Text style={styles.settingLabel}>Change Password</Text>
@@ -175,7 +216,7 @@ export default function SettingsScreen() {
             </View>
           )}
           <View style={styles.divider} />
-          <Pressable style={styles.settingRow} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPrivacy(!showPrivacy); }}>
+          <Pressable style={styles.settingRow} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPrivacy(!showPrivacy); }}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Shield size={18} color={Colors.categoryOffice} /></View>
               <Text style={styles.settingLabel}>Privacy Policy</Text>
@@ -186,7 +227,7 @@ export default function SettingsScreen() {
             <View style={styles.privacyContent}>
               <Text style={styles.privacyTitle}>Perfect Space Privacy Policy</Text>
               <Text style={styles.privacyText}>
-                {`1. Data Collection\nWe collect information you provide when creating an account, listing properties, and communicating with other users.\n\n2. Data Usage\nYour data is used to provide and improve our services, connect renters with property owners, and personalize your experience.\n\n3. Data Storage\nAll data is stored securely on your device. We do not share your personal information with third parties without your consent.\n\n4. Your Rights\n• Access your personal data at any time\n• Request data deletion via account settings\n• Opt out of notifications\n• Update or correct your information\n\n5. Communication\nWe may send notifications about bookings, messages, and platform updates. You can manage these in notification settings.\n\n6. Contact Us\nFor privacy concerns, contact support@perfectspace.com`}
+                {`1. Data Collection\nWe collect information you provide when creating an account, listing properties, and communicating with other users.\n\n2. Data Usage\nYour data is used to provide and improve our services, connect renters with property owners, and personalize your experience.\n\n3. Data Storage\nAll data is stored securely. We do not share your personal information with third parties without your consent.\n\n4. Your Rights\n• Access your personal data at any time\n• Request data deletion via account settings\n• Opt out of notifications\n• Update or correct your information\n\n5. Communication\nWe may send notifications about bookings, messages, and platform updates. You can manage these in notification settings.\n\n6. Contact Us\nFor privacy concerns, contact support@perfectspace.com`}
               </Text>
             </View>
           )}
@@ -208,7 +249,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>
-          <Pressable style={styles.settingRow} onPress={handleDeleteAccount}>
+          <Pressable style={styles.settingRow} onPress={handleDeleteAccount} disabled={deleteAccountPending}>
             <View style={styles.settingLeft}>
               <View style={[styles.iconBg, { backgroundColor: Colors.error + '15' }]}><Trash2 size={18} color={Colors.error} /></View>
               <Text style={[styles.settingLabel, { color: Colors.error }]}>Delete Account</Text>

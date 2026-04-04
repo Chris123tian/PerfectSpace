@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,17 +16,78 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
 import { Eye, EyeOff, ArrowRight, Building2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_DISCOVERY = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+};
+
 export default function LoginScreen() {
-  const { login, signup, loginPending, loginError, resetLoginError, isAuthenticated } = useAuth();
+  const { login, googleAuth, loginPending, loginError, resetLoginError, googleAuthPending, isAuthenticated } = useAuth();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: Platform.OS === 'web' });
+
+  const [_request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: googleClientId ?? '',
+      redirectUri,
+      scopes: ['openid', 'profile', 'email'],
+      responseType: AuthSession.ResponseType.Token,
+    },
+    GOOGLE_DISCOVERY
+  );
+
+  const handleGoogleResponse = useCallback(async (accessToken: string) => {
+    try {
+      console.log('[Login] Fetching Google user info...');
+      const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const userInfo = await userInfoRes.json();
+      console.log('[Login] Google user info:', userInfo.email, userInfo.name);
+
+      await googleAuth({
+        email: userInfo.email,
+        name: userInfo.name ?? 'Google User',
+        avatar: userInfo.picture,
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/');
+    } catch (e: unknown) {
+      console.log('[Login] Google auth error:', e);
+      const msg = e instanceof Error ? e.message : 'Failed to sign in with Google';
+      Alert.alert('Google Sign-In Failed', msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [googleAuth]);
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.authentication?.accessToken) {
+      console.log('[Login] Google OAuth success, got access token');
+      void handleGoogleResponse(response.authentication.accessToken);
+    } else if (response?.type === 'error') {
+      console.log('[Login] Google OAuth error:', response.error);
+      setGoogleLoading(false);
+      Alert.alert('Google Sign-In Error', 'Authentication failed. Please try again.');
+    } else if (response?.type === 'dismiss') {
+      setGoogleLoading(false);
+    }
+  }, [response, handleGoogleResponse]);
 
   if (isAuthenticated) {
     return <Redirect href="/" />;
@@ -54,47 +115,41 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     resetLoginError();
     if (!validate()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake();
       return;
     }
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await login({ email: email.trim(), password });
       router.replace('/');
     } catch {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake();
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      const googleEmail = `user${Date.now().toString(36)}@gmail.com`;
-      const googleName = 'Google User';
-      await signup({
-        name: googleName,
-        email: googleEmail,
-        password: 'google_' + Date.now().toString(36),
-        phone: '',
-        role: 'renter',
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/');
-    } catch (e) {
-      console.log('[Login] Google sign-in error:', e);
+    if (!googleClientId) {
       Alert.alert(
         'Google Sign-In',
-        'To use Google Sign-In, please create an account first with your email, or sign in with existing credentials.',
+        'Google Sign-In requires a Google OAuth Client ID. Please configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your environment variables.\n\nYou can get one from the Google Cloud Console.',
         [
-          { text: 'Sign Up', onPress: () => router.push('/signup') },
+          { text: 'Sign Up Instead', onPress: () => router.push('/signup') },
           { text: 'OK', style: 'cancel' },
         ]
       );
-    } finally {
+      return;
+    }
+
+    setGoogleLoading(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      void promptAsync();
+    } catch (e) {
+      console.log('[Login] Google prompt error:', e);
       setGoogleLoading(false);
+      Alert.alert('Error', 'Failed to open Google Sign-In. Please try again.');
     }
   };
 
@@ -187,17 +242,17 @@ export default function LoginScreen() {
               </View>
 
               <Pressable
-                style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+                style={[styles.googleButton, (googleLoading || googleAuthPending) && styles.googleButtonDisabled]}
                 onPress={handleGoogleSignIn}
-                disabled={googleLoading}
+                disabled={googleLoading || googleAuthPending}
                 testID="google-signin"
               >
-                {googleLoading ? (
+                {(googleLoading || googleAuthPending) ? (
                   <ActivityIndicator color={Colors.text} />
                 ) : (
                   <>
                     <View style={styles.googleIconContainer}>
-                      <Text style={styles.googleIconG}>G</Text>
+                      <Text style={styles.googleG}>G</Text>
                     </View>
                     <Text style={styles.googleButtonText}>Continue with Google</Text>
                   </>
@@ -209,6 +264,12 @@ export default function LoginScreen() {
                 <Pressable onPress={() => router.push('/signup')} testID="go-signup">
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </Pressable>
+              </View>
+
+              <View style={styles.adminHint}>
+                <Text style={styles.adminHintText}>
+                  Admin login: admin@perfectspace.com / admin123
+                </Text>
               </View>
             </Animated.View>
           </ScrollView>
@@ -389,17 +450,17 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   googleIconContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.white,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#4285F4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  googleIconG: {
-    fontSize: 18,
+  googleG: {
+    fontSize: 16,
     fontWeight: '700' as const,
-    color: '#4285F4',
+    color: Colors.white,
   },
   googleButtonText: {
     fontSize: 16,
@@ -419,5 +480,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.primary,
+  },
+  adminHint: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  adminHintText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '500' as const,
+    textAlign: 'center',
   },
 });

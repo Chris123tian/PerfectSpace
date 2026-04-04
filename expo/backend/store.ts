@@ -25,183 +25,20 @@ const seedUsers: User[] = [
     verified: true,
     isActive: true,
   },
-  {
-    id: "u2",
-    name: "Sarah Chen",
-    email: "sarah@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 234-5678",
-    role: "landlord",
-    bio: "Experienced property manager with premium apartments in New York.",
-    propertiesCount: 2,
-    reviewsCount: 32,
-    rating: 4.8,
-    memberSince: "Jan 2024",
-    verified: true,
-    isActive: true,
-  },
-  {
-    id: "u3",
-    name: "Marcus Williams",
-    email: "marcus@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 345-6789",
-    role: "landlord",
-    bio: "Commercial real estate specialist focused on modern co-working spaces.",
-    propertiesCount: 2,
-    reviewsCount: 30,
-    rating: 4.6,
-    memberSince: "Feb 2024",
-    verified: true,
-    isActive: true,
-  },
-  {
-    id: "u4",
-    name: "Emily Park",
-    email: "emily@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 456-7890",
-    role: "landlord",
-    bio: "Student housing specialist near university campuses.",
-    propertiesCount: 1,
-    reviewsCount: 42,
-    rating: 4.3,
-    memberSince: "Jan 2024",
-    verified: true,
-    isActive: true,
-  },
-  {
-    id: "u5",
-    name: "James Rivera",
-    email: "james@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 567-8901",
-    role: "landlord",
-    bio: "Offering affordable shared housing solutions in Austin.",
-    propertiesCount: 1,
-    reviewsCount: 15,
-    rating: 4.5,
-    memberSince: "Feb 2024",
-    verified: false,
-    isActive: true,
-  },
-  {
-    id: "u1",
-    name: "Alex Morgan",
-    email: "alex@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 123-4567",
-    role: "renter",
-    bio: "Looking for the perfect place to call home.",
-    propertiesCount: 0,
-    reviewsCount: 8,
-    rating: 4.7,
-    memberSince: "Jan 2024",
-    verified: true,
-    isActive: true,
-  },
-  {
-    id: "u6",
-    name: "David Kim",
-    email: "david@email.com",
-    password: "password123",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 678-9012",
-    role: "renter",
-    bio: "Tech professional looking for a modern apartment near downtown.",
-    propertiesCount: 0,
-    reviewsCount: 5,
-    rating: 4.9,
-    memberSince: "Mar 2024",
-    verified: true,
-    isActive: true,
-  },
 ];
 
-const seedProperties: Property[] = [
-  {
-    id: "p1", title: "Luxury Downtown Apartment", description: "Stunning 2-bedroom apartment in the heart of downtown with panoramic city views.", type: "apartment", listingType: "rent", price: 2800, currency: "$", period: "/mo", bedrooms: 2, bathrooms: 2, area: 1200, address: "123 Main Street, Apt 15B", city: "New York", latitude: 40.7128, longitude: -74.006,
-    images: ["https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800", "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800", "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800"],
-    amenities: ["Pool", "Gym", "Parking", "Doorman", "Laundry"], ownerId: "u2", ownerName: "Sarah Chen", ownerAvatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face", rating: 4.8, reviewCount: 24, featured: true, status: "active", createdAt: "2024-01-15",
-  },
-  {
-    id: "p2", title: "Modern Co-Working Office Space", description: "Premium co-working space in a renovated industrial building.", type: "office", listingType: "rent", price: 950, currency: "$", period: "/mo", bedrooms: 0, bathrooms: 2, area: 800, address: "456 Innovation Blvd", city: "San Francisco", latitude: 37.7749, longitude: -122.4194,
-    images: ["https://images.unsplash.com/photo-1497366216548-37526070297c?w=800", "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800", "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800"],
-    amenities: ["WiFi", "Meeting Rooms", "Kitchen", "Printer", "24/7 Access"], ownerId: "u3", ownerName: "Marcus Williams", ownerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", rating: 4.6, reviewCount: 18, featured: true, status: "active", createdAt: "2024-02-01",
-  },
-  {
-    id: "p3", title: "Cozy Student Hostel", description: "Affordable and friendly hostel near the university campus.", type: "hostel", listingType: "rent", price: 450, currency: "$", period: "/mo", bedrooms: 1, bathrooms: 1, area: 300, address: "789 Campus Drive", city: "Boston", latitude: 42.3601, longitude: -71.0589,
-    images: ["https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800", "https://images.unsplash.com/photo-1596276020587-8044fe049813?w=800", "https://images.unsplash.com/photo-1564078516393-cf04bd966897?w=800"],
-    amenities: ["WiFi", "Laundry", "Study Room", "Kitchen", "Lounge"], ownerId: "u4", ownerName: "Emily Park", ownerAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face", rating: 4.3, reviewCount: 42, featured: false, status: "active", createdAt: "2024-01-20",
-  },
-  {
-    id: "p4", title: "Private Room in Shared House", description: "Bright and spacious private room in a well-maintained shared house.", type: "room", listingType: "rent", price: 680, currency: "$", period: "/mo", bedrooms: 1, bathrooms: 1, area: 250, address: "321 Oak Avenue", city: "Austin", latitude: 30.2672, longitude: -97.7431,
-    images: ["https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800", "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800", "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=800"],
-    amenities: ["WiFi", "Parking", "Garden", "Kitchen", "Washer"], ownerId: "u5", ownerName: "James Rivera", ownerAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face", rating: 4.5, reviewCount: 15, featured: false, status: "active", createdAt: "2024-02-10",
-  },
-  {
-    id: "p5", title: "Penthouse Suite with Terrace", description: "Exquisite penthouse with a wraparound terrace offering breathtaking skyline views.", type: "apartment", listingType: "sale", price: 1250000, currency: "$", bedrooms: 3, bathrooms: 3, area: 2500, address: "500 Park Avenue", city: "New York", latitude: 40.7614, longitude: -73.9718,
-    images: ["https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800", "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800"],
-    amenities: ["Terrace", "Smart Home", "Elevator", "Gym", "Concierge"], ownerId: "u2", ownerName: "Sarah Chen", ownerAvatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face", rating: 4.9, reviewCount: 8, featured: true, status: "active", createdAt: "2024-02-05",
-  },
-  {
-    id: "p6", title: "Executive Office Suite", description: "Premium office suite in a Class A building with stunning harbor views.", type: "office", listingType: "rent", price: 3500, currency: "$", period: "/mo", bedrooms: 0, bathrooms: 1, area: 1500, address: "100 Harbor Blvd, Suite 800", city: "Chicago", latitude: 41.8781, longitude: -87.6298,
-    images: ["https://images.unsplash.com/photo-1604328698692-f76ea9498e76?w=800", "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=800", "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800"],
-    amenities: ["Reception", "Conference Room", "Parking", "Security", "Cafeteria"], ownerId: "u3", ownerName: "Marcus Williams", ownerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", rating: 4.7, reviewCount: 12, featured: false, status: "active", createdAt: "2024-01-28",
-  },
-  {
-    id: "p7", title: "Boutique City Hotel", description: "Charming boutique hotel in the heart of the city.", type: "hotel", listingType: "rent", price: 180, currency: "$", period: "/night", bedrooms: 1, bathrooms: 1, area: 400, address: "250 Riverside Drive", city: "New York", latitude: 40.7831, longitude: -73.9712,
-    images: ["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800", "https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800", "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800"],
-    amenities: ["Spa", "Room Service", "Pool", "Breakfast", "Concierge", "WiFi"], ownerId: "u2", ownerName: "Sarah Chen", ownerAvatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face", rating: 4.7, reviewCount: 56, featured: true, status: "active", createdAt: "2024-02-12",
-  },
-  {
-    id: "p8", title: "Seaside Resort Hotel", description: "Luxurious beachfront resort hotel with ocean-view suites.", type: "hotel", listingType: "rent", price: 320, currency: "$", period: "/night", bedrooms: 2, bathrooms: 2, area: 650, address: "1 Ocean Boulevard", city: "San Francisco", latitude: 37.7849, longitude: -122.4094,
-    images: ["https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=800", "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800", "https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=800"],
-    amenities: ["Beach Access", "Infinity Pool", "Fine Dining", "Spa", "Gym", "Bar"], ownerId: "u3", ownerName: "Marcus Williams", ownerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", rating: 4.9, reviewCount: 89, featured: true, status: "active", createdAt: "2024-01-30",
-  },
-];
+const seedProperties: Property[] = [];
+const seedConversations: Conversation[] = [];
+const seedChatMessages: ChatMessage[] = [];
+const seedReviews: Review[] = [];
+const seedBookings: Booking[] = [];
+const seedNotifications: AppNotification[] = [];
 
-const seedConversations: Conversation[] = [
-  { id: "conv1", participantIds: ["u1", "u2"], participantNames: ["Alex Morgan", "Sarah Chen"], participantAvatars: ["https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face"], propertyId: "p1", propertyTitle: "Luxury Downtown Apartment", propertyImage: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800", lastMessage: "The apartment is available for viewing this Saturday. Would 2pm work?", lastMessageTime: "2024-02-15T10:30:00Z", unreadCount: { u1: 1, u2: 0 } },
-  { id: "conv2", participantIds: ["u1", "u3"], participantNames: ["Alex Morgan", "Marcus Williams"], participantAvatars: ["https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face"], propertyId: "p2", propertyTitle: "Modern Co-Working Office", propertyImage: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800", lastMessage: "Great news! We have a desk available starting next month.", lastMessageTime: "2024-02-15T09:00:00Z", unreadCount: { u1: 1, u3: 0 } },
-  { id: "conv3", participantIds: ["u6", "u4"], participantNames: ["David Kim", "Emily Park"], participantAvatars: ["https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face"], propertyId: "p3", propertyTitle: "Cozy Student Hostel", propertyImage: "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800", lastMessage: "All utilities are included in the price.", lastMessageTime: "2024-02-14T16:00:00Z", unreadCount: { u6: 0, u4: 0 } },
-];
-
-const seedChatMessages: ChatMessage[] = [
-  { id: "cm1", conversationId: "conv1", senderId: "u1", text: "Hi! I am interested in the Luxury Downtown Apartment. Is it still available?", timestamp: "2024-02-15T10:00:00Z" },
-  { id: "cm2", conversationId: "conv1", senderId: "u2", text: "Yes, it is! Would you like to schedule a viewing?", timestamp: "2024-02-15T10:15:00Z" },
-  { id: "cm3", conversationId: "conv1", senderId: "u1", text: "That would be great! When is a good time?", timestamp: "2024-02-15T10:20:00Z" },
-  { id: "cm4", conversationId: "conv1", senderId: "u2", text: "The apartment is available for viewing this Saturday. Would 2pm work?", timestamp: "2024-02-15T10:30:00Z" },
-  { id: "cm5", conversationId: "conv2", senderId: "u1", text: "Hello, I need a co-working desk for my startup team.", timestamp: "2024-02-15T08:30:00Z" },
-  { id: "cm6", conversationId: "conv2", senderId: "u3", text: "Great news! We have a desk available starting next month.", timestamp: "2024-02-15T09:00:00Z" },
-  { id: "cm7", conversationId: "conv3", senderId: "u6", text: "Are utilities included in the hostel rent?", timestamp: "2024-02-14T15:30:00Z" },
-  { id: "cm8", conversationId: "conv3", senderId: "u4", text: "All utilities are included in the price.", timestamp: "2024-02-14T16:00:00Z" },
-];
-
-const seedReviews: Review[] = [
-  { id: "r1", propertyId: "p1", userId: "u6", userName: "David Kim", userAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face", rating: 5, comment: "Amazing apartment with incredible views!", date: "2024-01-20" },
-  { id: "r2", propertyId: "p1", userId: "u1", userName: "Alex Morgan", userAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", rating: 4, comment: "Great location and clean space.", date: "2024-01-25" },
-  { id: "r3", propertyId: "p2", userId: "u1", userName: "Alex Morgan", userAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", rating: 5, comment: "Best co-working space in the city!", date: "2024-02-01" },
-  { id: "r4", propertyId: "p3", userId: "u6", userName: "David Kim", userAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face", rating: 4, comment: "Good value for the price.", date: "2024-02-05" },
-  { id: "r5", propertyId: "p5", userId: "u6", userName: "David Kim", userAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face", rating: 5, comment: "Absolutely stunning penthouse.", date: "2024-02-10" },
-];
-
-const seedBookings: Booking[] = [
-  { id: "b1", propertyId: "p1", propertyTitle: "Luxury Downtown Apartment", propertyImage: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800", renterId: "u1", renterName: "Alex Morgan", renterAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", ownerId: "u2", ownerName: "Sarah Chen", date: "2024-02-20", time: "2:00 PM", status: "confirmed", notes: "Looking forward to seeing the apartment!", createdAt: "2024-02-15T10:30:00Z" },
-  { id: "b2", propertyId: "p2", propertyTitle: "Modern Co-Working Office", propertyImage: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800", renterId: "u6", renterName: "David Kim", renterAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face", ownerId: "u3", ownerName: "Marcus Williams", date: "2024-02-22", time: "10:00 AM", status: "pending", notes: "Need desk for 3-person team", createdAt: "2024-02-16T08:00:00Z" },
-];
-
-const seedNotifications: AppNotification[] = [
-  { id: "n1", userId: "u1", title: "Booking Confirmed", message: "Your viewing has been confirmed.", type: "booking", read: false, createdAt: "2024-02-15T11:00:00Z", data: { bookingId: "b1" } },
-  { id: "n2", userId: "u1", title: "New Message", message: "Sarah Chen sent you a message.", type: "message", read: false, createdAt: "2024-02-15T10:30:00Z", data: { conversationId: "conv1" } },
-  { id: "n3", userId: "u2", title: "New Booking Request", message: "Alex Morgan requested a viewing.", type: "booking", read: false, createdAt: "2024-02-15T10:30:00Z", data: { bookingId: "b1" } },
-  { id: "n6", userId: "admin1", title: "System Alert", message: "Platform is growing!", type: "system", read: false, createdAt: "2024-02-15T00:00:00Z" },
-];
+interface UserSettings {
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  darkMode: boolean;
+}
 
 class Store {
   users: User[] = [...seedUsers];
@@ -212,6 +49,7 @@ class Store {
   notifications: AppNotification[] = [...seedNotifications];
   reviews: Review[] = [...seedReviews];
   savedProperties: Record<string, string[]> = {};
+  userSettings: Record<string, UserSettings> = {};
 
   private idCounter = Date.now();
 

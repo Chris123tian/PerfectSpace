@@ -96,92 +96,92 @@ export const [DataProvider, useData] = createContextHook(() => {
   const addPropertyMutation = trpc.properties.add.useMutation({
     onSuccess: () => {
       console.log('[Data] Property added via backend');
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
   const updatePropertyMutation = trpc.properties.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
   const approvePropertyMutation = trpc.properties.approve.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
   const rejectPropertyMutation = trpc.properties.reject.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
   const deletePropertyMutation = trpc.properties.delete.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
   const toggleSaveMutation = trpc.properties.toggleSave.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['properties', 'getSaved']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'getSaved']] });
     },
   });
 
   const sendMessageMutation = trpc.conversations.sendMessage.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
-      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
     },
   });
 
   const startConversationMutation = trpc.conversations.startConversation.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
     },
   });
 
   const markConversationReadMutation = trpc.conversations.markRead.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
     },
   });
 
   const createBookingMutation = trpc.bookings.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
   const updateBookingMutation = trpc.bookings.updateStatus.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['bookings', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
   const addReviewMutation = trpc.reviews.add.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['reviews', 'list']] });
-      queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['reviews', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['properties', 'list']] });
     },
   });
 
   const markNotificationReadMutation = trpc.notifications.markRead.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
   const markAllNotificationsReadMutation = trpc.notifications.markAllRead.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
     },
   });
 
@@ -291,7 +291,7 @@ export const [DataProvider, useData] = createContextHook(() => {
     return savedPropertyIds.includes(propertyId);
   }, [savedPropertyIds]);
 
-  return {
+  return useMemo(() => ({
     properties,
     activeProperties,
     pendingProperties,
@@ -323,5 +323,12 @@ export const [DataProvider, useData] = createContextHook(() => {
     toggleSave,
     isSaved,
     isLoading: propertiesQuery.isLoading,
-  };
+  }), [
+    properties, activeProperties, pendingProperties, myProperties,
+    approveProperty, rejectProperty, addProperty, updateProperty, deleteProperty,
+    userConversations, conversations, getConversationMessages, sendMessage, startConversation, markConversationRead,
+    userBookings, bookings, createBooking, updateBooking,
+    userNotifications, notifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    reviews, getPropertyReviews, addReview, savedPropertyIds, toggleSave, isSaved, propertiesQuery.isLoading,
+  ]);
 });

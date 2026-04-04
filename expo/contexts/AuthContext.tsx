@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { User, UserRole } from '@/types/property';
 import { trpc } from '@/lib/trpc';
 
-const CURRENT_USER_KEY = 'ph_current_user';
+const CURRENT_USER_KEY = 'ps_current_user';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const queryClient = useQueryClient();
@@ -13,7 +13,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem(CURRENT_USER_KEY).then((stored) => {
+    void AsyncStorage.getItem(CURRENT_USER_KEY).then((stored) => {
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as User;
@@ -28,29 +28,38 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, []);
 
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       console.log('[Auth] Login success:', data.name, data.role);
       setUser(data);
-      await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
-      queryClient.invalidateQueries();
+      void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+      void queryClient.invalidateQueries();
     },
   });
 
   const signupMutation = trpc.auth.signup.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       console.log('[Auth] Signup success:', data.name);
       setUser(data);
-      await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
-      queryClient.invalidateQueries();
+      void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+      void queryClient.invalidateQueries();
+    },
+  });
+
+  const googleAuthMutation = trpc.auth.googleAuth.useMutation({
+    onSuccess: (data) => {
+      console.log('[Auth] Google auth success:', data.name);
+      setUser(data);
+      void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+      void queryClient.invalidateQueries();
     },
   });
 
   const updateProfileMutation = trpc.auth.updateProfile.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       console.log('[Auth] Profile updated:', data.name);
       setUser(data);
-      await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
-      queryClient.invalidateQueries();
+      void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+      void queryClient.invalidateQueries();
     },
   });
 
@@ -59,9 +68,25 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('[Auth] Admin updated user:', data.id);
       if (user && user.id === data.id) {
         setUser(data);
-        AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+        void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
       }
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
+    },
+  });
+
+  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation({
+    onSuccess: () => {
+      console.log('[Auth] Account deleted');
+      void AsyncStorage.removeItem(CURRENT_USER_KEY);
+      setUser(null);
+      queryClient.clear();
+    },
+  });
+
+  const updateSettingsMutation = trpc.auth.updateSettings.useMutation({
+    onSuccess: () => {
+      console.log('[Auth] Settings updated');
+      void queryClient.invalidateQueries({ queryKey: [['auth', 'getSettings']] });
     },
   });
 
@@ -72,6 +97,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole }) => {
     return signupMutation.mutateAsync(params);
   }, [signupMutation]);
+
+  const googleAuth = useCallback(async (params: { email: string; name: string; avatar?: string; role?: 'renter' | 'landlord' }) => {
+    return googleAuthMutation.mutateAsync(params);
+  }, [googleAuthMutation]);
 
   const logout = useCallback(async () => {
     console.log('[Auth] Logging out');
@@ -104,7 +133,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return updateUserAdminMutation.mutateAsync({ userId, updates: updates as Record<string, unknown> });
   }, [updateUserAdminMutation]);
 
-  return {
+  const deleteAccount = useCallback(async () => {
+    if (!user) throw new Error('Not authenticated');
+    return deleteAccountMutation.mutateAsync({ userId: user.id });
+  }, [user, deleteAccountMutation]);
+
+  const updateSettings = useCallback(async (settings: { pushEnabled?: boolean; emailEnabled?: boolean; darkMode?: boolean }) => {
+    if (!user) throw new Error('Not authenticated');
+    return updateSettingsMutation.mutateAsync({ userId: user.id, settings });
+  }, [user, updateSettingsMutation]);
+
+  return useMemo(() => ({
     user,
     isLoading,
     isAuthenticated: !!user,
@@ -116,10 +155,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signupPending: signupMutation.isPending,
     signupError: signupMutation.error?.message ?? null,
     resetSignupError: signupMutation.reset,
+    googleAuth,
+    googleAuthPending: googleAuthMutation.isPending,
+    googleAuthError: googleAuthMutation.error?.message ?? null,
     logout,
     updateProfile,
     updateProfilePending: updateProfileMutation.isPending,
     getAllUsers,
     updateUserAdmin,
-  };
+    deleteAccount,
+    deleteAccountPending: deleteAccountMutation.isPending,
+    updateSettings,
+  }), [
+    user, isLoading, login, loginMutation.isPending, loginMutation.error, loginMutation.reset,
+    signup, signupMutation.isPending, signupMutation.error, signupMutation.reset,
+    googleAuth, googleAuthMutation.isPending, googleAuthMutation.error,
+    logout, updateProfile, updateProfileMutation.isPending,
+    getAllUsers, updateUserAdmin, deleteAccount, deleteAccountMutation.isPending, updateSettings,
+  ]);
 });

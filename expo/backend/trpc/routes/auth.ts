@@ -67,6 +67,65 @@ export const authRouter = createTRPCRouter({
       return newUser;
     }),
 
+  googleAuth: publicProcedure
+    .input(
+      z.object({
+        email: z.string(),
+        name: z.string(),
+        avatar: z.string().optional(),
+        role: z.enum(["renter", "landlord"]).optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Auth] Google auth attempt:", input.email);
+      const existing = store.users.find(
+        (u) => u.email.toLowerCase() === input.email.toLowerCase()
+      );
+
+      if (existing) {
+        if (!existing.isActive)
+          throw new Error("Your account has been deactivated. Contact support.");
+        console.log("[Auth] Google login existing user:", existing.name);
+        if (input.avatar && input.avatar !== existing.avatar) {
+          const idx = store.users.findIndex((u) => u.id === existing.id);
+          if (idx !== -1) {
+            store.users[idx] = { ...store.users[idx], avatar: input.avatar };
+          }
+        }
+        return existing;
+      }
+
+      const role: UserRole = input.role ?? "renter";
+      const newUser = {
+        id: store.generateId("u"),
+        name: input.name,
+        email: input.email,
+        password: "google_oauth_" + Date.now().toString(36),
+        avatar:
+          input.avatar ||
+          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+        phone: "",
+        role,
+        bio:
+          role === "landlord"
+            ? "Property owner on Perfect Space."
+            : "Looking for the perfect space.",
+        propertiesCount: 0,
+        reviewsCount: 0,
+        rating: 0,
+        memberSince: new Date().toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        }),
+        verified: true,
+        isActive: true,
+      };
+
+      store.users.push(newUser);
+      console.log("[Auth] Google signup success:", newUser.name, "Total users:", store.users.length);
+      return newUser;
+    }),
+
   getUser: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(({ input }) => {
@@ -115,5 +174,58 @@ export const authRouter = createTRPCRouter({
         id: input.userId,
       } as typeof store.users[0];
       return store.users[idx];
+    }),
+
+  getSettings: publicProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(({ input }) => {
+      return store.userSettings[input.userId] ?? {
+        pushEnabled: true,
+        emailEnabled: true,
+        darkMode: false,
+      };
+    }),
+
+  updateSettings: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        settings: z.object({
+          pushEnabled: z.boolean().optional(),
+          emailEnabled: z.boolean().optional(),
+          darkMode: z.boolean().optional(),
+        }),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Auth] Updating settings for:", input.userId);
+      const existing = store.userSettings[input.userId] ?? {
+        pushEnabled: true,
+        emailEnabled: true,
+        darkMode: false,
+      };
+      store.userSettings[input.userId] = {
+        ...existing,
+        ...input.settings,
+      };
+      return store.userSettings[input.userId];
+    }),
+
+  deleteAccount: publicProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(({ input }) => {
+      console.log("[Auth] Deleting account:", input.userId);
+      store.users = store.users.filter((u) => u.id !== input.userId);
+      store.properties = store.properties.filter((p) => p.ownerId !== input.userId);
+      store.conversations = store.conversations.filter(
+        (c) => !c.participantIds.includes(input.userId)
+      );
+      store.bookings = store.bookings.filter(
+        (b) => b.renterId !== input.userId && b.ownerId !== input.userId
+      );
+      store.notifications = store.notifications.filter((n) => n.userId !== input.userId);
+      delete store.savedProperties[input.userId];
+      delete store.userSettings[input.userId];
+      return { success: true };
     }),
 });

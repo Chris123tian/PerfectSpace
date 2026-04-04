@@ -48,7 +48,7 @@ export default function HomeScreen() {
   const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleCategoryPress = useCallback((key: PropertyType | 'all') => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedCategory(key);
   }, []);
 
@@ -160,7 +160,7 @@ export default function HomeScreen() {
                 testID="search-input"
               />
             </View>
-            <Pressable style={styles.filterButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
+            <Pressable style={styles.filterButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
               <SlidersHorizontal size={20} color={Colors.white} />
             </Pressable>
           </View>
@@ -179,7 +179,7 @@ export default function HomeScreen() {
         {!user && (
           <Pressable
             style={styles.loginBanner}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/login'); }}
+            onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/login'); }}
             testID="login-banner"
           >
             <View style={styles.addPropertyLeft}>
@@ -196,7 +196,7 @@ export default function HomeScreen() {
         {user?.role === 'landlord' && (
           <Pressable
             style={styles.addPropertyBanner}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/add-property'); }}
+            onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push('/add-property'); }}
             testID="add-property-banner"
           >
             <View style={styles.addPropertyLeft}>
@@ -283,7 +283,7 @@ export default function HomeScreen() {
                 <Pressable
                   style={styles.featuredSlide}
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     router.push(`/property/${item.id}`);
                   }}
                   testID={`featured-slide-${item.id}`}

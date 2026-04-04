@@ -27,10 +27,10 @@ export default function ProfileScreen() {
   const { myProperties, bookings, savedPropertyIds, unreadNotificationCount } = useData();
 
   const handleLogout = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => { logout(); router.replace('/login'); } },
+      { text: 'Log Out', style: 'destructive', onPress: () => { void logout(); router.replace('/login'); } },
     ]);
   }, [logout]);
 
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.memberSince}>Member since {user.memberSince}</Text>
           </View>
-          <Pressable style={styles.editButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/edit-profile'); }} testID="edit-profile">
+          <Pressable style={styles.editButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/edit-profile'); }} testID="edit-profile">
             <Text style={styles.editButtonText}>Edit</Text>
           </Pressable>
         </View>

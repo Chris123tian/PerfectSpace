@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platfo
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, Camera, ConciergeBell } from 'lucide-react-native';
+import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
@@ -109,7 +109,7 @@ export default function AddPropertyScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const newUris = result.assets.map(a => a.uri);
         setImages(prev => [...prev, ...newUris].slice(0, 6));
         console.log('[AddProperty] Images picked:', newUris.length);
@@ -133,7 +133,7 @@ export default function AddPropertyScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setImages(prev => [...prev, result.assets[0].uri].slice(0, 6));
         console.log('[AddProperty] Photo taken');
       }
@@ -144,14 +144,14 @@ export default function AddPropertyScreen() {
   }, []);
 
   const removeImage = useCallback((index: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setImages(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   const showImageOptions = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (Platform.OS === 'web') {
-      pickImage();
+      void pickImage();
       return;
     }
     Alert.alert('Add Photos', 'Choose how to add property images', [
@@ -164,7 +164,7 @@ export default function AddPropertyScreen() {
   const handleSubmit = useCallback(async () => {
     if (!user) return;
     if (!title.trim() || !description.trim() || !price.trim() || !address.trim() || !city.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
       return;
     }
@@ -177,7 +177,7 @@ export default function AddPropertyScreen() {
     }
 
     setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       const newProperty: Property = {
@@ -211,7 +211,7 @@ export default function AddPropertyScreen() {
       console.log('[AddProperty] Submitting property:', newProperty.title, 'with', finalImages.length, 'images');
       await addProperty(newProperty);
       console.log('[AddProperty] Property added successfully');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -329,7 +329,7 @@ export default function AddPropertyScreen() {
                     onPress={() => {
                       setSelectedCurrency(opt);
                       setShowCurrencyPicker(false);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >
                     <Text style={[
