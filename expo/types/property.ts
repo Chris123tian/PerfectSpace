@@ -30,6 +30,8 @@ export interface Property {
   featured: boolean;
   status: PropertyStatus;
   createdAt: string;
+  country?: string;
+  whatsappPhone?: string;
 }
 
 export interface PropertyFilter {
@@ -40,6 +42,7 @@ export interface PropertyFilter {
   city?: string;
   bedrooms?: number;
   searchQuery?: string;
+  country?: string;
 }
 
 export interface Message {
@@ -101,6 +104,8 @@ export interface User {
   memberSince: string;
   verified: boolean;
   isActive: boolean;
+  country?: string;
+  idDocumentUri?: string;
 }
 
 export interface Booking {

@@ -8,6 +8,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import {
   ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
 } from 'lucide-react-native';
+import { Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -99,6 +100,31 @@ export default function PropertyDetailScreen() {
       console.log('[Property] Contact error:', e);
     }
   }, [property, user, startConversation]);
+
+  const handleWhatsApp = useCallback(async () => {
+    if (!property) return;
+    if (!property.whatsappPhone) {
+      Alert.alert('WhatsApp', `${property.ownerName} has not shared a WhatsApp number for this listing.`);
+      return;
+    }
+    if (property.ownerId === user?.id) {
+      Alert.alert('Info', 'This is your own property.');
+      return;
+    }
+    // Strip everything except digits and leading +, then remove the +
+    const phone = property.whatsappPhone.replace(/[^\d]/g, '');
+    const message = encodeURIComponent(
+      `Hi ${property.ownerName}! I'm interested in your listing "${property.title}". Could you share more details?`
+    );
+    // wa.me is the official WhatsApp universal link — opens the app on mobile, web.whatsapp.com on desktop
+    const url = `https://wa.me/${phone}?text=${message}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('WhatsApp', 'Could not open WhatsApp. Make sure it is installed on your device.');
+    }
+  }, [property, user]);
+
 
   const handleScheduleViewing = useCallback(() => {
     if (!property || !user) return;
@@ -339,6 +365,9 @@ export default function PropertyDetailScreen() {
                 <Pressable style={styles.ownerActionButton} onPress={handleContact} testID="message-owner">
                   <MessageCircle size={18} color={Colors.primary} />
                 </Pressable>
+                <Pressable style={styles.ownerWhatsAppButton} onPress={handleWhatsApp} testID="whatsapp-owner">
+                  <Text style={styles.ownerWhatsAppIcon}>💬</Text>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -458,9 +487,13 @@ export default function PropertyDetailScreen() {
               <Calendar size={18} color={Colors.primary} />
               <Text style={styles.scheduleText}>Visit</Text>
             </Pressable>
+            <Pressable style={styles.whatsappButton} onPress={handleWhatsApp} testID="whatsapp-cta">
+              <Text style={styles.whatsappIcon}>📱</Text>
+              <Text style={styles.whatsappText}>WhatsApp</Text>
+            </Pressable>
             <Pressable style={styles.contactButton} onPress={handleContact} testID="contact-owner">
               <MessageCircle size={18} color={Colors.white} />
-              <Text style={styles.contactText}>Contact</Text>
+              <Text style={styles.contactText}>Chat</Text>
             </Pressable>
           </View>
         </View>
@@ -541,8 +574,13 @@ const styles = StyleSheet.create({
   bottomActions: { flexDirection: 'row', gap: 10 },
   scheduleButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primaryLight },
   scheduleText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
+  whatsappButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: '#25D366' },
+  whatsappIcon: { fontSize: 16 },
+  whatsappText: { fontSize: 14, fontWeight: '700' as const, color: Colors.white },
   contactButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primary },
   contactText: { fontSize: 14, fontWeight: '600' as const, color: Colors.white },
+  ownerWhatsAppButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#25D366', alignItems: 'center', justifyContent: 'center' },
+  ownerWhatsAppIcon: { fontSize: 18 },
   imageDotsRow: { position: 'absolute' as const, bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
   imageCountBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   imageCountText: { color: Colors.white, fontSize: 12, fontWeight: '600' as const },
@@ -555,8 +593,8 @@ const styles = StyleSheet.create({
   galleryCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   galleryCounter: { fontSize: 16, fontWeight: '600' as const, color: Colors.white },
   galleryScroll: { flex: 1 },
-  gallerySlide: { width: width, justifyContent: 'center', alignItems: 'center' },
-  galleryImage: { width: width, height: screenHeight * 0.65 },
+  gallerySlide: { width: width, flex: 1, justifyContent: 'center', alignItems: 'center' },
+  galleryImage: { width: width, height: screenHeight },
   galleryNavLeft: { position: 'absolute' as const, left: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   galleryNavRight: { position: 'absolute' as const, right: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   galleryFooter: { alignItems: 'center', paddingVertical: 16 },

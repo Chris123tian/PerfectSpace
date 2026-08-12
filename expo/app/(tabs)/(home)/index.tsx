@@ -39,7 +39,7 @@ const SLIDE_SPACING = 12;
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { activeProperties } = useData();
+  const { filteredActiveProperties, activeFilterCount } = useData();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -53,7 +53,8 @@ export default function HomeScreen() {
   }, []);
 
   const filteredProperties = useMemo(() => {
-    let result = activeProperties;
+    // Start from the globally-filtered list (country, city, listingType, price, bedrooms)
+    let result = filteredActiveProperties;
     if (selectedCategory !== 'all') {
       result = result.filter(p => p.type === selectedCategory);
     }
@@ -67,9 +68,9 @@ export default function HomeScreen() {
       );
     }
     return result;
-  }, [selectedCategory, searchQuery, activeProperties]);
+  }, [selectedCategory, searchQuery, filteredActiveProperties]);
 
-  const featuredProperties = useMemo(() => activeProperties.filter(p => p.featured), [activeProperties]);
+  const featuredProperties = useMemo(() => filteredActiveProperties.filter(p => p.featured), [filteredActiveProperties]);
 
   useEffect(() => {
     if (featuredProperties.length <= 1) return;
@@ -162,6 +163,11 @@ export default function HomeScreen() {
             </View>
             <Pressable style={styles.filterButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
               <SlidersHorizontal size={20} color={Colors.white} />
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </Animated.View>
@@ -372,7 +378,9 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.background, borderRadius: 14, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 8, gap: 8 },
   searchInput: { flex: 1, fontSize: 15, color: Colors.text },
-  filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: Colors.accent, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.white },
+  filterBadgeText: { fontSize: 10, fontWeight: '800' as const, color: Colors.white },
   scrollView: { flex: 1 },
   loginBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

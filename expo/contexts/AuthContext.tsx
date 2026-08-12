@@ -94,7 +94,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return loginMutation.mutateAsync({ email, password });
   }, [loginMutation]);
 
-  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole }) => {
+  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole; country?: string }) => {
     return signupMutation.mutateAsync(params);
   }, [signupMutation]);
 

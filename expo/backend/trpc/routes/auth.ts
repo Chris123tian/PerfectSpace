@@ -28,6 +28,7 @@ export const authRouter = createTRPCRouter({
         password: z.string(),
         phone: z.string(),
         role: z.enum(["renter", "landlord", "admin"]),
+        country: z.string().optional(),
       })
     )
     .mutation(({ input }) => {
@@ -60,6 +61,7 @@ export const authRouter = createTRPCRouter({
         }),
         verified: false,
         isActive: true,
+        country: input.country,
       };
 
       store.users.push(newUser);

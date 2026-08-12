@@ -1,13 +1,16 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
-import { Property, Conversation, ChatMessage, Booking, AppNotification, Review, BookingStatus } from '@/types/property';
+import { Property, Conversation, ChatMessage, Booking, AppNotification, Review, BookingStatus, PropertyFilter } from '@/types/property';
 import { useAuth } from './AuthContext';
 import { trpc } from '@/lib/trpc';
 
 export const [DataProvider, useData] = createContextHook(() => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Global filter state shared across screens
+  const [filters, setFilters] = useState<PropertyFilter>({});
 
   const propertiesQuery = trpc.properties.list.useQuery(undefined, {
     refetchInterval: 3000,
@@ -88,10 +91,66 @@ export const [DataProvider, useData] = createContextHook(() => {
     [properties]
   );
 
+  /** Active properties with global filters applied */
+  const filteredActiveProperties = useMemo(() => {
+    let result = activeProperties;
+
+    if (filters.country && filters.country !== 'Any') {
+      result = result.filter(p => p.country === filters.country);
+    }
+    if (filters.city && filters.city !== 'Any') {
+      result = result.filter(p => p.city === filters.city);
+    }
+    if (filters.type) {
+      result = result.filter(p => p.type === filters.type);
+    }
+    if (filters.listingType) {
+      result = result.filter(p => p.listingType === filters.listingType);
+    }
+    if (filters.minPrice !== undefined) {
+      result = result.filter(p => p.price >= (filters.minPrice ?? 0));
+    }
+    if (filters.maxPrice !== undefined && filters.maxPrice !== Infinity) {
+      result = result.filter(p => p.price <= (filters.maxPrice ?? Infinity));
+    }
+    if (filters.bedrooms !== undefined && filters.bedrooms > 0) {
+      result = result.filter(p => p.bedrooms >= (filters.bedrooms ?? 0));
+    }
+    if (filters.searchQuery?.trim()) {
+      const q = filters.searchQuery.toLowerCase();
+      result = result.filter(
+        p =>
+          p.title.toLowerCase().includes(q) ||
+          p.city.toLowerCase().includes(q) ||
+          p.address.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [activeProperties, filters]);
+
   const pendingProperties = useMemo(
     () => properties.filter(p => p.status === 'pending'),
     [properties]
   );
+
+  const updateFilters = useCallback((newFilters: Partial<PropertyFilter>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters({});
+  }, []);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.country && filters.country !== 'Any') count++;
+    if (filters.city && filters.city !== 'Any') count++;
+    if (filters.type) count++;
+    if (filters.listingType) count++;
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) count++;
+    if (filters.bedrooms !== undefined && filters.bedrooms > 0) count++;
+    return count;
+  }, [filters]);
 
   const addPropertyMutation = trpc.properties.add.useMutation({
     onSuccess: () => {
@@ -294,6 +353,7 @@ export const [DataProvider, useData] = createContextHook(() => {
   return useMemo(() => ({
     properties,
     activeProperties,
+    filteredActiveProperties,
     pendingProperties,
     myProperties,
     approveProperty,
@@ -323,12 +383,18 @@ export const [DataProvider, useData] = createContextHook(() => {
     toggleSave,
     isSaved,
     isLoading: propertiesQuery.isLoading,
+    // Filter state
+    filters,
+    updateFilters,
+    resetFilters,
+    activeFilterCount,
   }), [
-    properties, activeProperties, pendingProperties, myProperties,
+    properties, activeProperties, filteredActiveProperties, pendingProperties, myProperties,
     approveProperty, rejectProperty, addProperty, updateProperty, deleteProperty,
     userConversations, conversations, getConversationMessages, sendMessage, startConversation, markConversationRead,
     userBookings, bookings, createBooking, updateBooking,
     userNotifications, notifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     reviews, getPropertyReviews, addReview, savedPropertyIds, toggleSave, isSaved, propertiesQuery.isLoading,
+    filters, updateFilters, resetFilters, activeFilterCount,
   ]);
 });

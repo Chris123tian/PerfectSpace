@@ -9,17 +9,17 @@ import { useData } from '@/contexts/DataContext';
 import PropertyCard from '@/components/PropertyCard';
 
 export default function ExploreScreen() {
-  const { activeProperties } = useData();
+  const { filteredActiveProperties, activeFilterCount } = useData();
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const filteredProperties = useMemo(() => {
-    if (!searchQuery.trim()) return activeProperties;
+    if (!searchQuery.trim()) return filteredActiveProperties;
     const q = searchQuery.toLowerCase();
-    return activeProperties.filter(
+    return filteredActiveProperties.filter(
       p => p.title.toLowerCase().includes(q) || p.city.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)
     );
-  }, [searchQuery, activeProperties]);
+  }, [searchQuery, filteredActiveProperties]);
 
   const toggleView = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -73,6 +73,11 @@ export default function ExploreScreen() {
             </Pressable>
             <Pressable style={styles.filterBtn} onPress={() => router.push('/filters')} testID="explore-filter">
               <SlidersHorizontal size={20} color={Colors.primary} />
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </View>
@@ -109,7 +114,9 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 15, color: Colors.text },
   viewToggle: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
   viewToggleActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  filterBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight },
+  filterBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight, position: 'relative' },
+  filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: Colors.accent, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.white },
+  filterBadgeText: { fontSize: 10, fontWeight: '800' as const, color: Colors.white },
   listContent: { paddingTop: 12, paddingBottom: 30 },
   resultCount: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const, paddingHorizontal: 20, marginBottom: 12 },
   mapContainer: { flex: 1 },

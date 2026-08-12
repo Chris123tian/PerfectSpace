@@ -3,10 +3,14 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p q69m7xvblmvl537mohj0a --tunnel",
+    "start": "bunx rork start -p q69m7xvblmvl537mohj0a",
+    "dev": "expo start --offline",
+    "backend": "bun run backend/run.ts",
     "start-web": "bunx rork start -p q69m7xvblmvl537mohj0a --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p q69m7xvblmvl537mohj0a --web --tunnel",
-    "lint": "expo lint"
+    "web": "expo start --web --offline",
+    "dev-web": "expo start --web --clear --port 8083 --offline",
+    "web-clear": "expo start --web -c --offline"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -37,6 +41,7 @@
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.10",
+    "firebase": "^12.17.1",
     "hono": "^4.12.3",
     "lucide-react-native": "^0.475.0",
     "react": "19.1.0",
@@ -54,6 +59,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@expo/cli": "54.0.18",
     "@expo/ngrok": "^4.1.0",
     "@types/react": "~19.1.10",
     "eslint": "^9.31.0",

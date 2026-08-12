@@ -8,31 +8,15 @@ import {
   Review,
 } from "@/types/property";
 
-const seedUsers: User[] = [
-  {
-    id: "admin1",
-    name: "Admin Panel",
-    email: "admin@perfectspace.com",
-    password: "admin123",
-    avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
-    phone: "+1 (555) 000-0000",
-    role: "admin",
-    bio: "Platform administrator managing Perfect Space.",
-    propertiesCount: 0,
-    reviewsCount: 0,
-    rating: 5,
-    memberSince: "Jan 2024",
-    verified: true,
-    isActive: true,
-  },
-];
-
-const seedProperties: Property[] = [];
-const seedConversations: Conversation[] = [];
-const seedChatMessages: ChatMessage[] = [];
-const seedReviews: Review[] = [];
-const seedBookings: Booking[] = [];
-const seedNotifications: AppNotification[] = [];
+import {
+  seedUsers,
+  seedProperties,
+  seedConversations,
+  seedChatMessages,
+  seedReviews,
+  seedBookings,
+  seedNotifications,
+} from "../mocks/properties";
 
 interface UserSettings {
   pushEnabled: boolean;
