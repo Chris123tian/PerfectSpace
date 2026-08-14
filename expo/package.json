@@ -3,6 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "build": "expo export -p web",
+    "build:web": "expo export -p web",
     "start": "bunx rork start -p q69m7xvblmvl537mohj0a",
     "dev": "expo start --offline",
     "backend": "bun run backend/run.ts",
