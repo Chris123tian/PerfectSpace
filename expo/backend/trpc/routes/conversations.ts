@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "@/backend/store";
-import { Conversation, ChatMessage } from "@/types/property";
+import { store } from "../../store";
+import { Conversation, ChatMessage } from "../../../types/property";
 
 export const conversationsRouter = createTRPCRouter({
   list: publicProcedure.query(() => {

@@ -16,7 +16,7 @@ import { router } from 'expo-router';
 import { ArrowLeft, Mail, Lock, Eye, EyeOff, Building2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { trpc } from '@/lib/trpc';
+import { trpc, getBaseUrl } from '@/lib/trpc';
 
 type Step = 'email' | 'reset';
 
@@ -49,7 +49,7 @@ export default function ForgotPasswordScreen() {
     try {
       // Fetch all users to find the email
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'http://localhost:4000'}/api/trpc/auth.getAllUsers`,
+        `${getBaseUrl()}/api/trpc/auth.getAllUsers`,
         { headers: { 'Content-Type': 'application/json' } }
       );
       const json = await response.json() as { result?: { data?: { json?: Array<{ id: string; email: string }> } } };

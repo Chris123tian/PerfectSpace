@@ -6,7 +6,7 @@ import {
   Booking,
   AppNotification,
   Review,
-} from "@/types/property";
+} from "../types/property";
 
 import {
   seedUsers,

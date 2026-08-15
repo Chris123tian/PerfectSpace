@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "@/backend/store";
-import { UserRole } from "@/types/property";
+import { store } from "../../store";
+import { UserRole } from "../../../types/property";
 
 export const authRouter = createTRPCRouter({
   login: publicProcedure
