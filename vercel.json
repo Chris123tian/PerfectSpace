@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd expo && npm install && npm run build",
+  "outputDirectory": "expo/dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/((?!api).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
