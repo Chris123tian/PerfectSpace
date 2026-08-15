@@ -31,4 +31,12 @@ app.get("/", (c) => {
   return c.json({ status: "ok", message: "Perfect Space API is running" });
 });
 
+app.get("/api", (c) => {
+  return c.json({ status: "ok", message: "Perfect Space API is running" });
+});
+
+app.get("/api/health", (c) => {
+  return c.json({ status: "ok", message: "Perfect Space API is healthy" });
+});
+
 export default app;
