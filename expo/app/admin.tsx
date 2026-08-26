@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import {
   ArrowLeft, Users, Building2, Calendar, Shield, ShieldOff,
@@ -258,7 +258,7 @@ export default function AdminScreen() {
       contentContainerStyle={styles.tabContent}
       renderItem={({ item: u }) => (
         <View style={styles.userCard}>
-          <Image source={{ uri: u.avatar }} style={styles.userAvatar} />
+          <SafeImage uri={u.avatar} style={styles.userAvatar} variant="avatar" role={u.role} />
           <View style={styles.userInfo}>
             <View style={styles.userNameRow}>
               <Text style={styles.userName}>{u.name}</Text>
@@ -306,7 +306,7 @@ export default function AdminScreen() {
       renderItem={({ item: p }) => (
         <View style={styles.pendingCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
-            <Image source={{ uri: p.images[0] }} style={styles.pendingImage} />
+            <SafeImage uri={p.images[0]} style={styles.pendingImage} variant="property" propertyType={p.type} contentFit="cover" />
             <View style={styles.propInfo}>
               <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.propOwner}>by {p.ownerName}</Text>
@@ -316,7 +316,7 @@ export default function AdminScreen() {
           </Pressable>
           <View style={styles.pendingImages}>
             {p.images.slice(0, 3).map((img, idx) => (
-              <Image key={idx} source={{ uri: img }} style={styles.pendingThumb} contentFit="cover" />
+              <SafeImage key={idx} uri={img} style={styles.pendingThumb} variant="property" propertyType={p.type} contentFit="cover" />
             ))}
           </View>
           <View style={styles.pendingActions}>
@@ -342,7 +342,7 @@ export default function AdminScreen() {
       renderItem={({ item: p }) => (
         <View style={styles.propCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
-            <Image source={{ uri: p.images[0] }} style={styles.propImage} />
+            <SafeImage uri={p.images[0]} style={styles.propImage} variant="property" propertyType={p.type} contentFit="cover" />
             <View style={styles.propInfo}>
               <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.propOwner}>by {p.ownerName}</Text>

@@ -24,14 +24,32 @@ export const getBaseUrl = (): string => {
   return "http://localhost:4000";
 };
 
-// NOTE: the `url` here uses a *function* so tRPC resolves it lazily on each
-// request, rather than once at module-initialization time.  This is critical
-// for Expo web builds where the Metro bundler evaluates module code during
-// bundling (in a Node context where window is undefined).
+// tRPC v11's httpLink requires url to be `string | URL`, not a function.
+// We work around this by lazily creating the client the first time it is
+// needed, at which point window (and therefore window.location) is available.
+let _trpcClient: ReturnType<typeof trpc.createClient> | null = null;
+
+export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
+  if (!_trpcClient) {
+    _trpcClient = trpc.createClient({
+      links: [
+        httpLink({
+          url: `${getBaseUrl()}/api/trpc`,
+          transformer: superjson,
+        }),
+      ],
+    });
+  }
+  return _trpcClient;
+};
+
+// Convenience re-export so existing import sites keep working.
+// The object is created once at module evaluation time.
+// On web this is fine because metro evaluates modules after the page loads.
 export const trpcClient = trpc.createClient({
   links: [
     httpLink({
-      url: () => `${getBaseUrl()}/api/trpc`,
+      url: `${getBaseUrl()}/api/trpc`,
       transformer: superjson,
     }),
   ],

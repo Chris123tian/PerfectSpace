@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import {
   Settings, ChevronRight, Heart, Star, Shield, Bell, HelpCircle, LogOut,
   Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck,
@@ -109,7 +109,7 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileCard}>
-          <Image source={{ uri: user.avatar }} style={styles.profileAvatar} />
+          <SafeImage uri={user.avatar} style={styles.profileAvatar} variant="avatar" role={user.role} />
           <View style={styles.profileInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.profileName}>{user.name}</Text>

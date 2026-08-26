@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Send, Home as HomeIcon } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -57,7 +57,7 @@ export default function ChatScreen() {
     const isMe = item.senderId === user?.id;
     return (
       <View style={[styles.messageBubbleRow, isMe ? styles.myRow : styles.otherRow]}>
-        {!isMe && <Image source={{ uri: otherParticipant.avatar }} style={styles.messageAvatar} />}
+        {!isMe && <SafeImage uri={otherParticipant.avatar} style={styles.messageAvatar} variant="avatar" role="default" />}
         <View style={[styles.messageBubble, isMe ? styles.myBubble : styles.otherBubble]}>
           <Text style={[styles.messageText, isMe ? styles.myText : styles.otherText]}>{item.text}</Text>
           <Text style={[styles.messageTime, isMe ? styles.myTime : styles.otherTime]}>{formatTime(item.timestamp)}</Text>
@@ -88,7 +88,7 @@ export default function ChatScreen() {
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Image source={{ uri: otherParticipant.avatar }} style={styles.headerAvatar} />
+            <SafeImage uri={otherParticipant.avatar} style={styles.headerAvatar} variant="avatar" role="default" />
             <View>
               <Text style={styles.headerName}>{otherParticipant.name}</Text>
               <Text style={styles.headerProperty} numberOfLines={1}>{conversation.propertyTitle}</Text>

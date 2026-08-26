@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import { ArrowLeft, Star, MessageSquare } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -34,7 +34,7 @@ export default function MyReviewsScreen() {
       onPress={() => router.push(`/property/${item.propertyId}`)}
       testID={`review-${item.id}`}
     >
-      <Image source={{ uri: getPropertyImage(item.propertyId) }} style={styles.cardImage} contentFit="cover" />
+      <SafeImage uri={getPropertyImage(item.propertyId)} style={styles.cardImage} variant="property" contentFit="cover" />
       <View style={styles.cardContent}>
         <Text style={styles.propertyTitle} numberOfLines={1}>{getPropertyTitle(item.propertyId)}</Text>
         <View style={styles.ratingRow}>

@@ -8,6 +8,8 @@
     "start": "bunx rork start -p q69m7xvblmvl537mohj0a",
     "dev": "expo start --offline",
     "backend": "bun run backend/run.ts",
+    "dev:all": "npx concurrently -k -n BACKEND,FRONTEND -c cyan,magenta \"bun run backend/run.ts\" \"expo start --web --clear --port 8083\"",
+    "dev:web": "npx concurrently -k -n BACKEND,FRONTEND -c cyan,magenta \"bun run backend/run.ts\" \"expo start --web --port 8083 --offline\"",
     "start-web": "bunx rork start -p q69m7xvblmvl537mohj0a --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p q69m7xvblmvl537mohj0a --web --tunnel",
     "web": "expo start --web --offline",

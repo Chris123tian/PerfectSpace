@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -251,7 +251,7 @@ export default function AddPropertyScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
             {images.map((uri, index) => (
               <View key={`img-${index}`} style={styles.imageThumb}>
-                <Image source={{ uri }} style={styles.thumbImage} contentFit="cover" />
+                <SafeImage uri={uri} style={styles.thumbImage} variant="property" contentFit="cover" />
                 <Pressable style={styles.removeImageBtn} onPress={() => removeImage(index)} testID={`remove-img-${index}`}>
                   <Trash2 size={14} color={Colors.white} />
                 </Pressable>

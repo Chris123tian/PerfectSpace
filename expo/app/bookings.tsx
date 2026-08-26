@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import { ArrowLeft, Calendar, Check, X as XIcon, Clock, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -46,7 +46,7 @@ export default function BookingsScreen() {
     return (
       <View style={styles.card}>
         <Pressable style={styles.cardTop} onPress={() => router.push(`/property/${item.propertyId}`)}>
-          <Image source={{ uri: item.propertyImage }} style={styles.cardImage} />
+          <SafeImage uri={item.propertyImage} style={styles.cardImage} variant="property" contentFit="cover" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle} numberOfLines={1}>{item.propertyTitle}</Text>
             <View style={styles.cardRow}>

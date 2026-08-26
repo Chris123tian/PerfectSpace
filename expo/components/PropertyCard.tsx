@@ -7,12 +7,12 @@ import {
   Animated,
   useWindowDimensions,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Star, MapPin, Bed, Bath, Maximize } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { Property } from '@/types/property';
+import SafeImage from '@/components/SafeImage';
 
 interface PropertyCardProps {
   property: Property;
@@ -71,9 +71,11 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
         testID={`property-card-${property.id}`}
       >
         <Animated.View style={[styles.compactCard, { transform: [{ scale: scaleAnim }] }]}>
-          <Image
-            source={{ uri: property.images[0] }}
+          <SafeImage
+            uri={property.images[0]}
             style={styles.compactImage}
+            propertyType={property.type}
+            variant="property"
             contentFit="cover"
             transition={200}
           />
@@ -111,9 +113,11 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
         { transform: [{ scale: scaleAnim }] },
       ]}>
         <View style={[styles.imageContainer, isWide && styles.imageContainerWide]}>
-          <Image
-            source={{ uri: property.images[0] }}
+          <SafeImage
+            uri={property.images[0]}
             style={[styles.image, isWide && styles.imageWide]}
+            propertyType={property.type}
+            variant="property"
             contentFit="cover"
             transition={300}
           />

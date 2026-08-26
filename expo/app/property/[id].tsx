@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Alert, Animated, Platform, TextInput, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
   ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
@@ -245,7 +245,7 @@ export default function PropertyDetailScreen() {
           >
             {property.images.map((img, idx) => (
               <Pressable key={idx} onPress={() => openGallery(idx)} testID={`hero-image-${idx}`}>
-                <Image source={{ uri: img }} style={styles.heroImage} contentFit="cover" transition={200} />
+                <SafeImage uri={img} style={styles.heroImage} variant="property" contentFit="cover" transition={200} />
               </Pressable>
             ))}
           </ScrollView>
@@ -285,7 +285,7 @@ export default function PropertyDetailScreen() {
                 onPress={() => openGallery(idx)}
                 testID={`thumb-${idx}`}
               >
-                <Image source={{ uri: img }} style={styles.thumbnailImage} contentFit="cover" />
+                <SafeImage uri={img} style={styles.thumbnailImage} variant="property" contentFit="cover" />
               </Pressable>
             ))}
           </View>
@@ -356,7 +356,7 @@ export default function PropertyDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Owner</Text>
             <View style={styles.ownerCard}>
-              <Image source={{ uri: property.ownerAvatar }} style={styles.ownerAvatar} />
+              <SafeImage uri={property.ownerAvatar} style={styles.ownerAvatar} variant="avatar" role="landlord" />
               <View style={styles.ownerInfo}>
                 <Text style={styles.ownerName}>{property.ownerName}</Text>
                 <Text style={styles.ownerRole}>Property Owner</Text>
@@ -411,7 +411,7 @@ export default function PropertyDetailScreen() {
             {propertyReviews.slice(0, 5).map((review) => (
               <View key={review.id} style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
-                  <Image source={{ uri: review.userAvatar }} style={styles.reviewAvatar} />
+                  <SafeImage uri={review.userAvatar} style={styles.reviewAvatar} variant="avatar" role="renter" />
                   <View style={styles.reviewInfo}>
                     <Text style={styles.reviewName}>{review.userName}</Text>
                     <Text style={styles.reviewDate}>{review.date}</Text>
@@ -450,7 +450,7 @@ export default function PropertyDetailScreen() {
           >
             {property.images.map((img, idx) => (
               <View key={idx} style={styles.gallerySlide}>
-                <Image source={{ uri: img }} style={styles.galleryImage} contentFit="contain" />
+                <SafeImage uri={img} style={styles.galleryImage} variant="property" contentFit="contain" />
               </View>
             ))}
           </ScrollView>

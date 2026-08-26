@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import { ArrowLeft, Plus, Edit3, Trash2, Eye, Star, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -42,7 +42,7 @@ export default function MyListingsScreen() {
   const renderProperty = useCallback(({ item }: { item: Property }) => (
     <View style={styles.card}>
       <Pressable onPress={() => router.push(`/property/${item.id}`)} testID={`listing-${item.id}`}>
-        <Image source={{ uri: item.images[0] }} style={styles.image} contentFit="cover" />
+        <SafeImage uri={item.images[0]} style={styles.image} propertyType={item.type} variant="property" contentFit="cover" />
         <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? Colors.success : item.status === 'rejected' ? Colors.error : Colors.warning }]}>
           <Text style={styles.statusText}>
             {item.status === 'pending' ? 'Pending Approval' : item.status === 'rejected' ? 'Rejected' : item.status.charAt(0).toUpperCase() + item.status.slice(1)}

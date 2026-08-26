@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { MessageCircle, Search } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -56,7 +56,7 @@ export default function MessagesScreen() {
     return (
       <Pressable style={styles.messageCard} onPress={() => handlePress(item)} testID={`conversation-${item.id}`}>
         <View style={styles.avatarContainer}>
-          <Image source={{ uri: other.avatar }} style={styles.avatar} />
+          <SafeImage uri={other.avatar} style={styles.avatar} variant="avatar" role="default" />
           {unread > 0 && <View style={styles.unreadDot} />}
         </View>
         <View style={styles.messageContent}>

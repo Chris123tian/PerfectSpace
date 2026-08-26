@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import { X, Camera, ShieldCheck, ShieldAlert, Upload, FileText, CreditCard, Globe } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -197,7 +197,7 @@ export default function EditProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.avatarSection}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          <SafeImage uri={avatarUri} style={styles.avatar} variant="avatar" role={user.role} />
           <Pressable style={styles.changePhotoBtn} onPress={handleChangePhoto} testID="change-photo">
             <Camera size={16} color={Colors.primary} />
             <Text style={styles.changePhotoText}>Change Photo</Text>
@@ -280,7 +280,7 @@ export default function EditProfileScreen() {
 
                 {idDocUri ? (
                   <View style={styles.idPreviewContainer}>
-                    <Image source={{ uri: idDocUri }} style={styles.idPreview} contentFit="cover" />
+                    <SafeImage uri={idDocUri} style={styles.idPreview} variant="property" contentFit="cover" />
                     <View style={styles.idPreviewOverlay}>
                       <Pressable
                         style={styles.reuploadBtn}

@@ -14,7 +14,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import SafeImage from '@/components/SafeImage';
 import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin, LogIn } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -141,9 +141,11 @@ export default function HomeScreen() {
               <Text style={styles.greetingBold}>Perfect Space</Text>
             </View>
             <Pressable onPress={() => router.push('/(tabs)/profile')} testID="header-avatar">
-              <Image
-                source={{ uri: user?.avatar ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200' }}
+              <SafeImage
+                uri={user?.avatar ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200'}
                 style={styles.avatar}
+                variant="avatar"
+                role={user?.role ?? 'default'}
               />
             </Pressable>
           </View>
@@ -294,9 +296,11 @@ export default function HomeScreen() {
                   }}
                   testID={`featured-slide-${item.id}`}
                 >
-                  <Image
-                    source={{ uri: item.images[0] }}
+                  <SafeImage
+                    uri={item.images[0]}
                     style={styles.featuredSlideImage}
+                    variant="property"
+                    propertyType={item.type}
                     contentFit="cover"
                     transition={200}
                   />
