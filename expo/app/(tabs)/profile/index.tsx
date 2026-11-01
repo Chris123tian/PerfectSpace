@@ -11,6 +11,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import SignInPrompt from '@/components/SignInPrompt';
 
 interface MenuItem {
   id: string;
@@ -34,7 +35,22 @@ export default function ProfileScreen() {
     ]);
   }, [logout]);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView edges={['top']} style={styles.safeArea}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Profile</Text>
+          </View>
+        </SafeAreaView>
+        <SignInPrompt
+          title="Sign in to view your profile"
+          subtitle="Manage your listings, bookings, saved properties and more."
+          testIDPrefix="profile-signin"
+        />
+      </View>
+    );
+  }
 
   const pendingBookings = bookings.filter(b => b.status === 'pending').length;
 

@@ -9,6 +9,7 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Conversation } from '@/types/property';
+import SignInPrompt from '@/components/SignInPrompt';
 
 export default function MessagesScreen() {
   const { user } = useAuth();
@@ -84,6 +85,13 @@ export default function MessagesScreen() {
         </View>
       </SafeAreaView>
 
+      {!user ? (
+        <SignInPrompt
+          title="Sign in to see your messages"
+          subtitle="Chat with property owners and track your bookings — all in one place."
+          testIDPrefix="messages-signin"
+        />
+      ) : (
       <FlatList
         data={sortedConversations}
         keyExtractor={(item) => item.id}
@@ -99,6 +107,7 @@ export default function MessagesScreen() {
           </View>
         }
       />
+      )}
     </View>
   );
 }
