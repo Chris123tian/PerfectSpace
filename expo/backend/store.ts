@@ -42,10 +42,34 @@ interface UserSettings {
   darkMode: boolean;
 }
 
-// ── Disk persistence ─────────────────────────────────────────────────────────
-// Every collection is mirrored to a JSON snapshot shortly after each mutation,
-// so user data survives server restarts and deploys. Seeds are only used when
-// no snapshot exists yet.
+// ── Persistence ─────────────────────────────────────────────────────────────
+// Every collection is mirrored to a snapshot shortly after each mutation, so
+// user data survives restarts and deploys. Seeds are only used when no
+// snapshot exists yet.
+//
+// Two backends:
+//  - FileSnapshotAdapter (default): JSON file on disk — local dev (Bun) and
+//    Node serverless.
+//  - Injected adapter: the Cloudflare Durable Object registers a SQLite-backed
+//    adapter via setPersistenceAdapter() before serving any request.
+
+export interface PersistenceAdapter {
+  /** Return the persisted snapshot, or null when none exists. */
+  load(): Partial<PersistedData> | null;
+  /** Durably store the snapshot. Synchronous when the backend allows it. */
+  save(data: PersistedData): void;
+}
+
+let persistenceAdapter: PersistenceAdapter | null = null;
+
+/**
+ * Install (or remove) a persistence backend. When a snapshot exists it is
+ * loaded immediately so the store serves durable data from the first request.
+ */
+export function setPersistenceAdapter(adapter: PersistenceAdapter | null): void {
+  persistenceAdapter = adapter;
+  if (adapter) store.reloadFrom(adapter.load());
+}
 
 const DATA_DIR = path.join(dataRoot(), "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
@@ -66,7 +90,7 @@ function dataRoot(): string {
   return "/tmp";
 }
 
-type PersistedData = {
+export type PersistedData = {
   users: User[];
   properties: Property[];
   conversations: Conversation[];
@@ -150,9 +174,17 @@ class Store {
   private idCounter = Date.now();
 
   constructor() {
-    const saved = loadPersisted();
-    // Replace collections wholesale (through the setters, which re-wrap in
-    // tracked proxies) so an existing snapshot always wins over seeds.
+    this.reloadFrom(loadPersisted());
+  }
+
+  /**
+   * Replace collections with persisted data (through the setters, which
+   * re-wrap in tracked proxies). A snapshot always wins over seeds. Called
+   * with the file snapshot at startup and again whenever a new persistence
+   * adapter is installed.
+   */
+  reloadFrom(saved: Partial<PersistedData> | null) {
+    if (!saved) return;
     if (saved.users?.length) this.users = saved.users;
     if (saved.properties?.length) this.properties = saved.properties;
     if (saved.conversations?.length) this.conversations = saved.conversations;
@@ -255,20 +287,28 @@ class Store {
   flush() {
     if (!this.dirty) return;
     this.dirty = false;
+    const data: PersistedData = {
+      users: this.users,
+      properties: this.properties,
+      conversations: this.conversations,
+      chatMessages: this.chatMessages,
+      bookings: this.bookings,
+      notifications: this.notifications,
+      reviews: this.reviews,
+      savedProperties: this.savedProperties,
+      userSettings: this.userSettings,
+    };
+    if (persistenceAdapter) {
+      try {
+        persistenceAdapter.save(data);
+      } catch (e) {
+        console.error("[Store] Adapter save failed:", e);
+      }
+      return;
+    }
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       const tmp = DATA_FILE + ".tmp";
-      const data: PersistedData = {
-        users: this.users,
-        properties: this.properties,
-        conversations: this.conversations,
-        chatMessages: this.chatMessages,
-        bookings: this.bookings,
-        notifications: this.notifications,
-        reviews: this.reviews,
-        savedProperties: this.savedProperties,
-        userSettings: this.userSettings,
-      };
       fs.writeFileSync(tmp, JSON.stringify(data));
       fs.renameSync(tmp, DATA_FILE);
     } catch (e) {

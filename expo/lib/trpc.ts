@@ -7,37 +7,19 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 export const trpc = createTRPCReact<AppRouter>();
 
 /**
- * Resolves the backend base URL at request time.
- * - Prefers the persistent Cloudflare backend (EXPO_PUBLIC_RORK_FUNCTIONS_URL)
- *   so the API works everywhere — preview, production and native — and
- *   survives sandbox restarts. The sandbox dev URL (EXPO_PUBLIC_RORK_API_BASE_URL)
- *   is only a fallback for environments without a functions host.
- * - On deployed web hosts without either env URL, falls back to same-origin.
+ * Resolves the backend base URL — always the persistent Cloudflare backend.
+ * The API is durable (Durable Object SQLite) and reachable everywhere:
+ * preview, production, native apps and third-party hosts like Vercel.
  */
 export const getBaseUrl = (): string => {
+  // The platform-injected functions URL, when present.
   const functionsUrl = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL;
-  const envUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-
-  // Persistent edge backend — reachable from any surface.
   if (functionsUrl && functionsUrl.startsWith("https://")) return functionsUrl;
 
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const isLocalPage = hostname === "localhost" || hostname === "127.0.0.1";
-
-    // Trust the env URL unless it is a localhost URL on a deployed site
-    if (envUrl && !(envUrl.includes("localhost") && !isLocalPage)) {
-      return envUrl;
-    }
-    // Deployed site without a valid env URL: same-origin backend
-    if (!isLocalPage) {
-      return window.location.origin;
-    }
-    return envUrl || "http://localhost:4000";
-  }
-
-  // Native / server-side fallback
-  return envUrl || "http://localhost:4000";
+  // Known deploy of the same worker (public URL, not a secret). Hardcoded so
+  // platforms that don't inject Rork env vars — e.g. Vercel builds from the
+  // GitHub repo — still reach the persistent backend out of the box.
+  return "https://property-hub-app-i2wuyiy-backend.rork.app";
 };
 
 // tRPC v11's httpLink requires url to be `string | URL`, not a function.
