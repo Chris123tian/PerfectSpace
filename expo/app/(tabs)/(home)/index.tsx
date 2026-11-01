@@ -39,7 +39,7 @@ const SLIDE_SPACING = 12;
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { filteredActiveProperties, activeFilterCount } = useData();
+  const { activeProperties } = useData();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -53,8 +53,7 @@ export default function HomeScreen() {
   }, []);
 
   const filteredProperties = useMemo(() => {
-    // Start from the globally-filtered list (country, city, listingType, price, bedrooms)
-    let result = filteredActiveProperties;
+    let result = activeProperties;
     if (selectedCategory !== 'all') {
       result = result.filter(p => p.type === selectedCategory);
     }
@@ -68,9 +67,9 @@ export default function HomeScreen() {
       );
     }
     return result;
-  }, [selectedCategory, searchQuery, filteredActiveProperties]);
+  }, [selectedCategory, searchQuery, activeProperties]);
 
-  const featuredProperties = useMemo(() => filteredActiveProperties.filter(p => p.featured), [filteredActiveProperties]);
+  const featuredProperties = useMemo(() => activeProperties.filter(p => p.featured), [activeProperties]);
 
   useEffect(() => {
     if (featuredProperties.length <= 1) return;
@@ -140,14 +139,6 @@ export default function HomeScreen() {
               <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
               <Text style={styles.greetingBold}>Perfect Space</Text>
             </View>
-            <Pressable onPress={() => router.push('/(tabs)/profile')} testID="header-avatar">
-              <SafeImage
-                uri={user?.avatar ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200'}
-                style={styles.avatar}
-                variant="avatar"
-                role={user?.role ?? 'default'}
-              />
-            </Pressable>
           </View>
 
           <View style={styles.searchRow}>
@@ -165,11 +156,6 @@ export default function HomeScreen() {
             </View>
             <Pressable style={styles.filterButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
               <SlidersHorizontal size={20} color={Colors.white} />
-              {activeFilterCount > 0 && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-                </View>
-              )}
             </Pressable>
           </View>
         </Animated.View>
@@ -299,8 +285,6 @@ export default function HomeScreen() {
                   <SafeImage
                     uri={item.images[0]}
                     style={styles.featuredSlideImage}
-                    variant="property"
-                    propertyType={item.type}
                     contentFit="cover"
                     transition={200}
                   />
@@ -378,13 +362,10 @@ const styles = StyleSheet.create({
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingTop: 8 },
   greeting: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
   greetingBold: { fontSize: 24, fontWeight: '800' as const, color: Colors.text, letterSpacing: -0.5 },
-  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: Colors.primaryLight },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.background, borderRadius: 14, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 8, gap: 8 },
   searchInput: { flex: 1, fontSize: 15, color: Colors.text },
-  filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: Colors.accent, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.white },
-  filterBadgeText: { fontSize: 10, fontWeight: '800' as const, color: Colors.white },
+  filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   scrollView: { flex: 1 },
   loginBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -433,5 +414,5 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '600' as const, color: Colors.text, marginTop: 16 },
   emptySubtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 8, textAlign: 'center' },
-  bottomSpacer: { height: 30 },
+  bottomSpacer: { height: 110 },
 });

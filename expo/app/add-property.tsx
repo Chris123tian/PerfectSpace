@@ -92,8 +92,6 @@ export default function AddPropertyScreen() {
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption>(currencyOptions[0]);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
   const [images, setImages] = useState<string[]>([]);
-  const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
-  const [showTerms, setShowTerms] = useState<boolean>(false);
 
   const pickImage = useCallback(async () => {
     try {
@@ -171,12 +169,6 @@ export default function AddPropertyScreen() {
       return;
     }
 
-    if (!termsAccepted) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Terms & Conditions', 'You must accept the Terms and Conditions before listing a property.');
-      return;
-    }
-
     const finalImages = images.length >= 3 ? images : fallbackImages[type];
 
     if (images.length > 0 && images.length < 3) {
@@ -221,7 +213,7 @@ export default function AddPropertyScreen() {
       console.log('[AddProperty] Property added successfully');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
-        { text: 'OK', onPress: () => router.replace('/') },
+        { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e) {
       console.log('[AddProperty] Error:', e);
@@ -229,7 +221,7 @@ export default function AddPropertyScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency, termsAccepted]);
+  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency]);
 
   return (
     <View style={styles.container}>
@@ -251,7 +243,7 @@ export default function AddPropertyScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
             {images.map((uri, index) => (
               <View key={`img-${index}`} style={styles.imageThumb}>
-                <SafeImage uri={uri} style={styles.thumbImage} variant="property" contentFit="cover" />
+                <SafeImage uri={uri} style={styles.thumbImage} contentFit="cover" />
                 <Pressable style={styles.removeImageBtn} onPress={() => removeImage(index)} testID={`remove-img-${index}`}>
                   <Trash2 size={14} color={Colors.white} />
                 </Pressable>
@@ -382,39 +374,6 @@ export default function AddPropertyScreen() {
           <TextInput style={styles.input} value={amenities} onChangeText={setAmenities} placeholder="WiFi, Parking, Pool (comma-separated)" placeholderTextColor={Colors.textLight} />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Terms & Conditions</Text>
-          <Pressable
-            style={styles.termsBox}
-            onPress={() => setShowTerms(!showTerms)}
-            testID="toggle-terms"
-          >
-            <Text style={styles.termsToggleText}>{showTerms ? 'Hide' : 'Read'} Terms & Conditions ▾</Text>
-          </Pressable>
-          {showTerms && (
-            <View style={styles.termsContent}>
-              <Text style={styles.termsText}>{`By listing a property on Perfect Space, you agree to the following:\n\n1. Accuracy\nAll property information provided must be accurate, truthful, and up-to-date. Misleading listings will be removed.\n\n2. Ownership & Authorization\nYou confirm you are the owner of the property or are authorized to list it on behalf of the owner.\n\n3. Legal Compliance\nYour listing must comply with all applicable local laws and regulations, including zoning, rental licensing, and fair housing laws.\n\n4. Approval Process\nAll new listings are subject to admin review. Perfect Space reserves the right to reject any listing without providing a reason.\n\n5. Platform Rules\nYou agree not to engage in fraudulent activity, price gouging, or any behavior that may harm other users of the platform.\n\n6. Contact\nFor any queries, contact support@perfectspace.com`}
-              </Text>
-            </View>
-          )}
-          <Pressable
-            style={styles.checkboxRow}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setTermsAccepted(!termsAccepted);
-            }}
-            testID="terms-checkbox"
-          >
-            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>
-              I have read and agree to the{' '}
-              <Text style={styles.checkboxLabelBold}>Terms and Conditions</Text>
-            </Text>
-          </Pressable>
-        </View>
-
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
@@ -479,14 +438,4 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
   submitBtnDisabled: { opacity: 0.7 },
   submitText: { fontSize: 17, fontWeight: '700' as const, color: Colors.white },
-  termsBox: { backgroundColor: Colors.primaryLight + '40', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, marginBottom: 10, alignItems: 'center' },
-  termsToggleText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
-  termsContent: { backgroundColor: Colors.background, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: Colors.border },
-  termsText: { fontSize: 13, color: Colors.textSecondary, lineHeight: 20 },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.white },
-  checkboxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  checkmark: { fontSize: 14, fontWeight: '700' as const, color: Colors.white },
-  checkboxLabel: { fontSize: 14, color: Colors.text, flex: 1, flexWrap: 'wrap' },
-  checkboxLabelBold: { fontWeight: '700' as const, color: Colors.primary },
 });

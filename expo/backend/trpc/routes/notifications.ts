@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "../../store";
+import { store } from "@/backend/store";
 
 export const notificationsRouter = createTRPCRouter({
   list: publicProcedure.query(() => {

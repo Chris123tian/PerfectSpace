@@ -30,8 +30,6 @@ export interface Property {
   featured: boolean;
   status: PropertyStatus;
   createdAt: string;
-  country?: string;
-  whatsappPhone?: string;
 }
 
 export interface PropertyFilter {
@@ -42,7 +40,6 @@ export interface PropertyFilter {
   city?: string;
   bedrooms?: number;
   searchQuery?: string;
-  country?: string;
 }
 
 export interface Message {
@@ -93,7 +90,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   avatar: string;
   phone: string;
   role: UserRole;
@@ -104,8 +101,6 @@ export interface User {
   memberSince: string;
   verified: boolean;
   isActive: boolean;
-  country?: string;
-  idDocumentUri?: string;
 }
 
 export interface Booking {
@@ -122,6 +117,8 @@ export interface Booking {
   time: string;
   status: BookingStatus;
   notes: string;
+  /** How the viewing happens — lets renters book before entering the country. */
+  type?: 'in_person' | 'video';
   createdAt: string;
 }
 

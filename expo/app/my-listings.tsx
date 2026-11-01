@@ -42,7 +42,7 @@ export default function MyListingsScreen() {
   const renderProperty = useCallback(({ item }: { item: Property }) => (
     <View style={styles.card}>
       <Pressable onPress={() => router.push(`/property/${item.id}`)} testID={`listing-${item.id}`}>
-        <SafeImage uri={item.images[0]} style={styles.image} propertyType={item.type} variant="property" contentFit="cover" />
+        <SafeImage uri={item.images[0]} style={styles.image} contentFit="cover" />
         <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? Colors.success : item.status === 'rejected' ? Colors.error : Colors.warning }]}>
           <Text style={styles.statusText}>
             {item.status === 'pending' ? 'Pending Approval' : item.status === 'rejected' ? 'Rejected' : item.status.charAt(0).toUpperCase() + item.status.slice(1)}

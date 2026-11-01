@@ -6,22 +6,34 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
+/**
+ * Resolves the backend base URL at request time.
+ * - Always prefers the Rork-injected EXPO_PUBLIC_RORK_API_BASE_URL.
+ * - Only when that env var points at localhost while the page itself is served
+ *   from a deployed host (e.g. Vercel, where backend and frontend share one
+ *   origin) do we fall back to window.location.origin.
+ * - On native there is no window, so the env URL (or local dev port) is used.
+ */
 export const getBaseUrl = (): string => {
-  // This function is called lazily at request time, not at module init.
-  // Checking window.location at call time ensures we always get the real
-  // deployed domain, even when the bundle was built in a Node/SSR context
-  // where window was undefined.
+  const envUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
-    // Only point to the local backend when actively developing on localhost
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "http://localhost:4000";
+    const isLocalPage = hostname === "localhost" || hostname === "127.0.0.1";
+
+    // Trust the env URL unless it is a localhost URL on a deployed site
+    if (envUrl && !(envUrl.includes("localhost") && !isLocalPage)) {
+      return envUrl;
     }
-    // On any deployed domain (Vercel, etc.) use the page's own origin
-    return window.location.origin;
+    // Deployed site without a valid env URL: same-origin backend
+    if (!isLocalPage) {
+      return window.location.origin;
+    }
+    return envUrl || "http://localhost:4000";
   }
-  // Server-side / non-browser fallback
-  return "http://localhost:4000";
+
+  // Native / server-side fallback
+  return envUrl || "http://localhost:4000";
 };
 
 // tRPC v11's httpLink requires url to be `string | URL`, not a function.
@@ -29,6 +41,7 @@ export const getBaseUrl = (): string => {
 // needed, at which point window (and therefore window.location) is available.
 let _trpcClient: ReturnType<typeof trpc.createClient> | null = null;
 
+/** Lazily-created tRPC client — resolves the backend URL at first use. */
 export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
   if (!_trpcClient) {
     _trpcClient = trpc.createClient({
@@ -44,8 +57,8 @@ export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
 };
 
 // Convenience re-export so existing import sites keep working.
-// The object is created once at module evaluation time.
-// On web this is fine because metro evaluates modules after the page loads.
+// Created once at module evaluation time; on web metro evaluates modules
+// after the page loads, so window.location is available by then.
 export const trpcClient = trpc.createClient({
   links: [
     httpLink({

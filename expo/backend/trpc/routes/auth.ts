@@ -1,7 +1,14 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "../../store";
-import { UserRole } from "../../../types/property";
+import { store } from "@/backend/store";
+import { UserRole } from "@/types/property";
+
+// Never send password hashes/secrets back to the client.
+function sanitizeUser<T extends { password?: string }>(user: T): Omit<T, "password"> {
+  if (!user) return user;
+  const { password: _password, ...safe } = user;
+  return safe as Omit<T, "password">;
+}
 
 export const authRouter = createTRPCRouter({
   login: publicProcedure
@@ -17,7 +24,7 @@ export const authRouter = createTRPCRouter({
       if (!found.isActive)
         throw new Error("Your account has been deactivated. Contact support.");
       console.log("[Auth] Login success:", found.name, found.role);
-      return found;
+      return sanitizeUser(found);
     }),
 
   signup: publicProcedure
@@ -28,7 +35,6 @@ export const authRouter = createTRPCRouter({
         password: z.string(),
         phone: z.string(),
         role: z.enum(["renter", "landlord", "admin"]),
-        country: z.string().optional(),
       })
     )
     .mutation(({ input }) => {
@@ -61,12 +67,11 @@ export const authRouter = createTRPCRouter({
         }),
         verified: false,
         isActive: true,
-        country: input.country,
       };
 
       store.users.push(newUser);
       console.log("[Auth] Signup success:", newUser.name, "Total users:", store.users.length);
-      return newUser;
+      return sanitizeUser(newUser);
     }),
 
   googleAuth: publicProcedure
@@ -94,7 +99,7 @@ export const authRouter = createTRPCRouter({
             store.users[idx] = { ...store.users[idx], avatar: input.avatar };
           }
         }
-        return existing;
+        return sanitizeUser(existing);
       }
 
       const role: UserRole = input.role ?? "renter";
@@ -125,14 +130,14 @@ export const authRouter = createTRPCRouter({
 
       store.users.push(newUser);
       console.log("[Auth] Google signup success:", newUser.name, "Total users:", store.users.length);
-      return newUser;
+      return sanitizeUser(newUser);
     }),
 
   getUser: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(({ input }) => {
       const user = store.users.find((u) => u.id === input.userId);
-      return user ?? null;
+      return user ? sanitizeUser(user) : null;
     }),
 
   updateProfile: publicProcedure
@@ -152,11 +157,11 @@ export const authRouter = createTRPCRouter({
         id: store.users[idx].id,
         email: store.users[idx].email,
       } as typeof store.users[0];
-      return store.users[idx];
+      return sanitizeUser(store.users[idx]);
     }),
 
   getAllUsers: publicProcedure.query(() => {
-    return store.users;
+    return store.users.map(sanitizeUser);
   }),
 
   updateUserAdmin: publicProcedure
@@ -175,7 +180,7 @@ export const authRouter = createTRPCRouter({
         ...(input.updates as Record<string, unknown>),
         id: input.userId,
       } as typeof store.users[0];
-      return store.users[idx];
+      return sanitizeUser(store.users[idx]);
     }),
 
   getSettings: publicProcedure

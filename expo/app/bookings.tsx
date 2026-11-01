@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
-import { ArrowLeft, Calendar, Check, X as XIcon, Clock, MapPin } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Check, X as XIcon, Clock, MapPin, Video } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,12 +46,18 @@ export default function BookingsScreen() {
     return (
       <View style={styles.card}>
         <Pressable style={styles.cardTop} onPress={() => router.push(`/property/${item.propertyId}`)}>
-          <SafeImage uri={item.propertyImage} style={styles.cardImage} variant="property" contentFit="cover" />
+          <SafeImage uri={item.propertyImage} style={styles.cardImage} />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle} numberOfLines={1}>{item.propertyTitle}</Text>
             <View style={styles.cardRow}>
               <Calendar size={12} color={Colors.textSecondary} />
               <Text style={styles.cardDetail}>{item.date} at {item.time}</Text>
+              {item.type === 'video' && (
+                <View style={styles.videoBadge}>
+                  <Video size={10} color={Colors.white} />
+                  <Text style={styles.videoBadgeText}>Video tour</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.cardPerson}>
               {isOwner || isAdmin ? `Renter: ${item.renterName}` : `Owner: ${item.ownerName}`}
@@ -140,6 +146,8 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1 },
   cardTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  videoBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 },
+  videoBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' as const },
   cardDetail: { fontSize: 13, color: Colors.textSecondary },
   cardPerson: { fontSize: 12, color: Colors.primary, fontWeight: '500' as const, marginTop: 4 },
   cardNotes: { fontSize: 12, color: Colors.textLight, marginTop: 2, fontStyle: 'italic' as const },

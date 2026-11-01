@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
-import { Property, Conversation, ChatMessage, Booking, AppNotification, Review, BookingStatus, PropertyFilter } from '@/types/property';
+import { Property, Conversation, ChatMessage, Booking, AppNotification, Review, BookingStatus } from '@/types/property';
 import { useAuth } from './AuthContext';
 import { trpc } from '@/lib/trpc';
 
@@ -9,37 +9,42 @@ export const [DataProvider, useData] = createContextHook(() => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Global filter state shared across screens
-  const [filters, setFilters] = useState<PropertyFilter>({});
-
+  // Mutations invalidate the relevant queries, so lists stay fresh without
+  // aggressive polling — critical for keeping the backend fast under load.
   const propertiesQuery = trpc.properties.list.useQuery(undefined, {
-    refetchInterval: 3000,
-    staleTime: 1000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 15000,
   });
 
   const conversationsQuery = trpc.conversations.list.useQuery(undefined, {
-    refetchInterval: 3000,
-    staleTime: 1000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 15000,
   });
 
   const messagesQuery = trpc.conversations.allMessages.useQuery(undefined, {
-    refetchInterval: 3000,
-    staleTime: 1000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 15000,
   });
 
   const bookingsQuery = trpc.bookings.list.useQuery(undefined, {
-    refetchInterval: 3000,
-    staleTime: 1000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 15000,
   });
 
   const notificationsQuery = trpc.notifications.list.useQuery(undefined, {
-    refetchInterval: 3000,
-    staleTime: 1000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    staleTime: 15000,
   });
 
   const reviewsQuery = trpc.reviews.list.useQuery(undefined, {
-    refetchInterval: 5000,
-    staleTime: 2000,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
+    staleTime: 30000,
   });
 
   const userId = user?.id;
@@ -47,7 +52,8 @@ export const [DataProvider, useData] = createContextHook(() => {
     { userId: userId ?? '' },
     {
       enabled: !!userId,
-      refetchInterval: 5000,
+      refetchInterval: 30000,
+      refetchOnWindowFocus: true,
     }
   );
 
@@ -91,66 +97,10 @@ export const [DataProvider, useData] = createContextHook(() => {
     [properties]
   );
 
-  /** Active properties with global filters applied */
-  const filteredActiveProperties = useMemo(() => {
-    let result = activeProperties;
-
-    if (filters.country && filters.country !== 'Any') {
-      result = result.filter(p => p.country === filters.country);
-    }
-    if (filters.city && filters.city !== 'Any') {
-      result = result.filter(p => p.city === filters.city);
-    }
-    if (filters.type) {
-      result = result.filter(p => p.type === filters.type);
-    }
-    if (filters.listingType) {
-      result = result.filter(p => p.listingType === filters.listingType);
-    }
-    if (filters.minPrice !== undefined) {
-      result = result.filter(p => p.price >= (filters.minPrice ?? 0));
-    }
-    if (filters.maxPrice !== undefined && filters.maxPrice !== Infinity) {
-      result = result.filter(p => p.price <= (filters.maxPrice ?? Infinity));
-    }
-    if (filters.bedrooms !== undefined && filters.bedrooms > 0) {
-      result = result.filter(p => p.bedrooms >= (filters.bedrooms ?? 0));
-    }
-    if (filters.searchQuery?.trim()) {
-      const q = filters.searchQuery.toLowerCase();
-      result = result.filter(
-        p =>
-          p.title.toLowerCase().includes(q) ||
-          p.city.toLowerCase().includes(q) ||
-          p.address.toLowerCase().includes(q)
-      );
-    }
-    return result;
-  }, [activeProperties, filters]);
-
   const pendingProperties = useMemo(
     () => properties.filter(p => p.status === 'pending'),
     [properties]
   );
-
-  const updateFilters = useCallback((newFilters: Partial<PropertyFilter>) => {
-    setFilters(prev => ({ ...prev, ...newFilters }));
-  }, []);
-
-  const resetFilters = useCallback(() => {
-    setFilters({});
-  }, []);
-
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (filters.country && filters.country !== 'Any') count++;
-    if (filters.city && filters.city !== 'Any') count++;
-    if (filters.type) count++;
-    if (filters.listingType) count++;
-    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) count++;
-    if (filters.bedrooms !== undefined && filters.bedrooms > 0) count++;
-    return count;
-  }, [filters]);
 
   const addPropertyMutation = trpc.properties.add.useMutation({
     onSuccess: () => {
@@ -353,7 +303,6 @@ export const [DataProvider, useData] = createContextHook(() => {
   return useMemo(() => ({
     properties,
     activeProperties,
-    filteredActiveProperties,
     pendingProperties,
     myProperties,
     approveProperty,
@@ -383,18 +332,12 @@ export const [DataProvider, useData] = createContextHook(() => {
     toggleSave,
     isSaved,
     isLoading: propertiesQuery.isLoading,
-    // Filter state
-    filters,
-    updateFilters,
-    resetFilters,
-    activeFilterCount,
   }), [
-    properties, activeProperties, filteredActiveProperties, pendingProperties, myProperties,
+    properties, activeProperties, pendingProperties, myProperties,
     approveProperty, rejectProperty, addProperty, updateProperty, deleteProperty,
     userConversations, conversations, getConversationMessages, sendMessage, startConversation, markConversationRead,
     userBookings, bookings, createBooking, updateBooking,
     userNotifications, notifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     reviews, getPropertyReviews, addReview, savedPropertyIds, toggleSave, isSaved, propertiesQuery.isLoading,
-    filters, updateFilters, resetFilters, activeFilterCount,
   ]);
 });

@@ -109,7 +109,7 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileCard}>
-          <SafeImage uri={user.avatar} style={styles.profileAvatar} variant="avatar" role={user.role} />
+          <SafeImage uri={user.avatar} style={styles.profileAvatar} />
           <View style={styles.profileInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.profileName}>{user.name}</Text>

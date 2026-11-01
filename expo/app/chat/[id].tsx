@@ -57,7 +57,7 @@ export default function ChatScreen() {
     const isMe = item.senderId === user?.id;
     return (
       <View style={[styles.messageBubbleRow, isMe ? styles.myRow : styles.otherRow]}>
-        {!isMe && <SafeImage uri={otherParticipant.avatar} style={styles.messageAvatar} variant="avatar" role="default" />}
+        {!isMe && <SafeImage uri={otherParticipant.avatar} style={styles.messageAvatar} />}
         <View style={[styles.messageBubble, isMe ? styles.myBubble : styles.otherBubble]}>
           <Text style={[styles.messageText, isMe ? styles.myText : styles.otherText]}>{item.text}</Text>
           <Text style={[styles.messageTime, isMe ? styles.myTime : styles.otherTime]}>{formatTime(item.timestamp)}</Text>
@@ -88,7 +88,7 @@ export default function ChatScreen() {
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <SafeImage uri={otherParticipant.avatar} style={styles.headerAvatar} variant="avatar" role="default" />
+            <SafeImage uri={otherParticipant.avatar} style={styles.headerAvatar} />
             <View>
               <Text style={styles.headerName}>{otherParticipant.name}</Text>
               <Text style={styles.headerProperty} numberOfLines={1}>{conversation.propertyTitle}</Text>

@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 
 export default function SettingsScreen() {
-  const { user, updateSettings, updateProfile, deleteAccount, deleteAccountPending } = useAuth();
+  const { user, updateProfile, updateSettings, deleteAccount, deleteAccountPending } = useAuth();
   const [showPasswordForm, setShowPasswordForm] = useState<boolean>(false);
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -63,12 +63,14 @@ export default function SettingsScreen() {
       Alert.alert('Error', 'Please enter your current password.');
       return;
     }
-
+    if (currentPassword !== user?.password) {
+      Alert.alert('Error', 'Current password is incorrect.');
+      return;
+    }
     if (newPassword.length < 6) {
       Alert.alert('Error', 'New password must be at least 6 characters.');
       return;
     }
-
     if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'New passwords do not match.');
       return;
@@ -87,7 +89,7 @@ export default function SettingsScreen() {
       console.log('[Settings] Password change error:', e);
       Alert.alert('Error', 'Failed to update password. Please try again.');
     }
-  }, [currentPassword, newPassword, confirmPassword, updateProfile]);
+  }, [currentPassword, newPassword, confirmPassword, user?.password, updateProfile]);
 
   const handleDeleteAccount = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);

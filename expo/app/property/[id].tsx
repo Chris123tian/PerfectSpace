@@ -6,9 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
-  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
+  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, Video, Globe2, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
 } from 'lucide-react-native';
-import { Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,6 +26,12 @@ export default function PropertyDetailScreen() {
   const galleryScrollRef = useRef<ScrollView>(null);
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>('');
+  const [showBookingModal, setShowBookingModal] = useState<boolean>(false);
+  const [bookingType, setBookingType] = useState<'in_person' | 'video'>('in_person');
+  const [bookingDate, setBookingDate] = useState<string>('');
+  const [bookingTime, setBookingTime] = useState<string>('');
+  const [bookingNotes, setBookingNotes] = useState<string>('');
+  const [bookingError, setBookingError] = useState<string | undefined>(undefined);
   const heartScale = useRef(new Animated.Value(1)).current;
 
   const property = useMemo(() => properties.find(p => p.id === id), [id, properties]);
@@ -101,100 +106,95 @@ export default function PropertyDetailScreen() {
     }
   }, [property, user, startConversation]);
 
-  const handleWhatsApp = useCallback(async () => {
-    if (!property) return;
-    if (!property.whatsappPhone) {
-      Alert.alert('WhatsApp', `${property.ownerName} has not shared a WhatsApp number for this listing.`);
-      return;
-    }
-    if (property.ownerId === user?.id) {
-      Alert.alert('Info', 'This is your own property.');
-      return;
-    }
-    // Strip everything except digits and leading +, then remove the +
-    const phone = property.whatsappPhone.replace(/[^\d]/g, '');
-    const message = encodeURIComponent(
-      `Hi ${property.ownerName}! I'm interested in your listing "${property.title}". Could you share more details?`
-    );
-    // wa.me is the official WhatsApp universal link — opens the app on mobile, web.whatsapp.com on desktop
-    const url = `https://wa.me/${phone}?text=${message}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('WhatsApp', 'Could not open WhatsApp. Make sure it is installed on your device.');
-    }
+  const openBookingModal = useCallback((type: 'in_person' | 'video') => {
+    if (!property || !user) return;
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + (type === 'video' ? 3 : 14));
+    setBookingType(type);
+    setBookingDate(defaultDate.toISOString().split('T')[0]);
+    setBookingTime(type === 'video' ? '4:00 PM' : '10:00 AM');
+    setBookingNotes('');
+    setBookingError(undefined);
+    setShowBookingModal(true);
   }, [property, user]);
 
+  const promptSignIn = useCallback(() => {
+    Alert.alert('Create an account to book', 'Sign up free to reserve your space from anywhere in the world.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign In', onPress: () => router.push('/login') },
+    ]);
+  }, []);
 
   const handleScheduleViewing = useCallback(() => {
-    if (!property || !user) return;
+    if (!property) return;
+    if (!user) {
+      promptSignIn();
+      return;
+    }
     if (property.ownerId === user.id) {
       Alert.alert('Info', 'This is your own property.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Schedule Viewing', 'Choose a time to visit this property', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'This Week',
-        onPress: async () => {
-          try {
-            const date = new Date();
-            date.setDate(date.getDate() + 3);
-            await createBooking({
-              id: 'b_' + Date.now().toString(36),
-              propertyId: property.id,
-              propertyTitle: property.title,
-              propertyImage: property.images[0],
-              renterId: user.id,
-              renterName: user.name,
-              renterAvatar: user.avatar,
-              ownerId: property.ownerId,
-              ownerName: property.ownerName,
-              date: date.toISOString().split('T')[0],
-              time: '2:00 PM',
-              status: 'pending',
-              notes: 'Scheduled via property page',
-              createdAt: new Date().toISOString(),
-            });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Booked!', 'Your viewing request has been sent. The owner will confirm.');
-          } catch (e) {
-            console.log('[Property] Booking error:', e);
-          }
-        },
-      },
-      {
-        text: 'Next Week',
-        onPress: async () => {
-          try {
-            const date = new Date();
-            date.setDate(date.getDate() + 10);
-            await createBooking({
-              id: 'b_' + Date.now().toString(36),
-              propertyId: property.id,
-              propertyTitle: property.title,
-              propertyImage: property.images[0],
-              renterId: user.id,
-              renterName: user.name,
-              renterAvatar: user.avatar,
-              ownerId: property.ownerId,
-              ownerName: property.ownerName,
-              date: date.toISOString().split('T')[0],
-              time: '10:00 AM',
-              status: 'pending',
-              notes: 'Scheduled via property page',
-              createdAt: new Date().toISOString(),
-            });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Booked!', 'Your viewing request has been sent.');
-          } catch (e) {
-            console.log('[Property] Booking error:', e);
-          }
-        },
-      },
-    ]);
-  }, [property, user, createBooking]);
+    openBookingModal('in_person');
+  }, [property, user, openBookingModal, promptSignIn]);
+
+  const handleBookFromAbroad = useCallback(() => {
+    if (!property) return;
+    if (!user) {
+      promptSignIn();
+      return;
+    }
+    if (property.ownerId === user.id) {
+      Alert.alert('Info', 'This is your own property.');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    openBookingModal('video');
+  }, [property, user, openBookingModal, promptSignIn]);
+
+  const handleConfirmBooking = useCallback(async () => {
+    if (!property || !user) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(bookingDate.trim())) {
+      setBookingError('Enter the date as YYYY-MM-DD');
+      return;
+    }
+    if (!bookingTime.trim()) {
+      setBookingError('Enter a time, e.g. 2:00 PM');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await createBooking({
+        id: 'b_' + Date.now().toString(36),
+        propertyId: property.id,
+        propertyTitle: property.title,
+        propertyImage: property.images[0],
+        renterId: user.id,
+        renterName: user.name,
+        renterAvatar: user.avatar,
+        ownerId: property.ownerId,
+        ownerName: property.ownerName,
+        date: bookingDate.trim(),
+        time: bookingTime.trim(),
+        status: 'pending',
+        notes: bookingNotes.trim(),
+        type: bookingType,
+        createdAt: new Date().toISOString(),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowBookingModal(false);
+      Alert.alert(
+        'Booked!',
+        bookingType === 'video'
+          ? 'Video tour requested. The owner will confirm the time — you can do this all before you fly in.'
+          : 'Your viewing request has been sent. The owner will confirm.'
+      );
+    } catch (e) {
+      console.log('[Property] Booking error:', e);
+      setBookingError('Could not send the booking. Try again.');
+    }
+  }, [property, user, bookingDate, bookingTime, bookingNotes, bookingType, createBooking]);
 
   const handleSubmitReview = useCallback(async () => {
     if (!id || !reviewComment.trim()) {
@@ -245,7 +245,7 @@ export default function PropertyDetailScreen() {
           >
             {property.images.map((img, idx) => (
               <Pressable key={idx} onPress={() => openGallery(idx)} testID={`hero-image-${idx}`}>
-                <SafeImage uri={img} style={styles.heroImage} variant="property" contentFit="cover" transition={200} />
+                <SafeImage uri={img} style={styles.heroImage} contentFit="cover" transition={200} />
               </Pressable>
             ))}
           </ScrollView>
@@ -285,7 +285,7 @@ export default function PropertyDetailScreen() {
                 onPress={() => openGallery(idx)}
                 testID={`thumb-${idx}`}
               >
-                <SafeImage uri={img} style={styles.thumbnailImage} variant="property" contentFit="cover" />
+                <SafeImage uri={img} style={styles.thumbnailImage} contentFit="cover" />
               </Pressable>
             ))}
           </View>
@@ -356,7 +356,7 @@ export default function PropertyDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Owner</Text>
             <View style={styles.ownerCard}>
-              <SafeImage uri={property.ownerAvatar} style={styles.ownerAvatar} variant="avatar" role="landlord" />
+              <SafeImage uri={property.ownerAvatar} style={styles.ownerAvatar} />
               <View style={styles.ownerInfo}>
                 <Text style={styles.ownerName}>{property.ownerName}</Text>
                 <Text style={styles.ownerRole}>Property Owner</Text>
@@ -364,9 +364,6 @@ export default function PropertyDetailScreen() {
               <View style={styles.ownerActions}>
                 <Pressable style={styles.ownerActionButton} onPress={handleContact} testID="message-owner">
                   <MessageCircle size={18} color={Colors.primary} />
-                </Pressable>
-                <Pressable style={styles.ownerWhatsAppButton} onPress={handleWhatsApp} testID="whatsapp-owner">
-                  <Text style={styles.ownerWhatsAppIcon}>💬</Text>
                 </Pressable>
               </View>
             </View>
@@ -411,7 +408,7 @@ export default function PropertyDetailScreen() {
             {propertyReviews.slice(0, 5).map((review) => (
               <View key={review.id} style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
-                  <SafeImage uri={review.userAvatar} style={styles.reviewAvatar} variant="avatar" role="renter" />
+                  <SafeImage uri={review.userAvatar} style={styles.reviewAvatar} />
                   <View style={styles.reviewInfo}>
                     <Text style={styles.reviewName}>{review.userName}</Text>
                     <Text style={styles.reviewDate}>{review.date}</Text>
@@ -450,7 +447,7 @@ export default function PropertyDetailScreen() {
           >
             {property.images.map((img, idx) => (
               <View key={idx} style={styles.gallerySlide}>
-                <SafeImage uri={img} style={styles.galleryImage} variant="property" contentFit="contain" />
+                <SafeImage uri={img} style={styles.galleryImage} contentFit="contain" />
               </View>
             ))}
           </ScrollView>
@@ -487,17 +484,105 @@ export default function PropertyDetailScreen() {
               <Calendar size={18} color={Colors.primary} />
               <Text style={styles.scheduleText}>Visit</Text>
             </Pressable>
-            <Pressable style={styles.whatsappButton} onPress={handleWhatsApp} testID="whatsapp-cta">
-              <Text style={styles.whatsappIcon}>📱</Text>
-              <Text style={styles.whatsappText}>WhatsApp</Text>
-            </Pressable>
             <Pressable style={styles.contactButton} onPress={handleContact} testID="contact-owner">
               <MessageCircle size={18} color={Colors.white} />
-              <Text style={styles.contactText}>Chat</Text>
+              <Text style={styles.contactText}>Contact</Text>
             </Pressable>
           </View>
         </View>
+        <Pressable style={styles.abroadButton} onPress={handleBookFromAbroad} testID="book-from-abroad">
+          <Globe2 size={16} color={Colors.primary} />
+          <Text style={styles.abroadText}>Outside the country? Book a video tour before you fly in</Text>
+        </Pressable>
       </SafeAreaView>
+
+      <Modal visible={showBookingModal} animationType="slide" transparent>
+        <View style={styles.bookingOverlay}>
+          <SafeAreaView edges={['bottom']} style={styles.bookingSheet}>
+            <View style={styles.bookingHeader}>
+              <Text style={styles.bookingTitle}>Book {property.title}</Text>
+              <Pressable onPress={() => setShowBookingModal(false)} testID="booking-close">
+                <X size={22} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={styles.bookingSubtitle}>Reserve from anywhere in the world — even before your visa or flight is booked.</Text>
+
+            <View style={styles.bookingTypeRow}>
+              <Pressable
+                style={[styles.bookingTypeBtn, bookingType === 'in_person' && styles.bookingTypeBtnActive]}
+                onPress={() => setBookingType('in_person')}
+                testID="booking-type-in-person"
+              >
+                <Calendar size={18} color={bookingType === 'in_person' ? Colors.white : Colors.primary} />
+                <Text style={[styles.bookingTypeText, bookingType === 'in_person' && styles.bookingTypeTextActive]}>In-person viewing</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.bookingTypeBtn, bookingType === 'video' && styles.bookingTypeBtnActive]}
+                onPress={() => setBookingType('video')}
+                testID="booking-type-video"
+              >
+                <Video size={18} color={bookingType === 'video' ? Colors.white : Colors.primary} />
+                <Text style={[styles.bookingTypeText, bookingType === 'video' && styles.bookingTypeTextActive]}>Video tour (from abroad)</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.bookingRow}>
+              <View style={styles.bookingField}>
+                <Text style={styles.bookingLabel}>Date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.bookingInput}
+                  value={bookingDate}
+                  onChangeText={(t) => { setBookingDate(t); setBookingError(undefined); }}
+                  placeholder="2026-12-20"
+                  placeholderTextColor={Colors.textLight}
+                  autoCapitalize="none"
+                  testID="booking-date"
+                />
+              </View>
+              <View style={styles.bookingField}>
+                <Text style={styles.bookingLabel}>Time</Text>
+                <TextInput
+                  style={styles.bookingInput}
+                  value={bookingTime}
+                  onChangeText={(t) => { setBookingTime(t); setBookingError(undefined); }}
+                  placeholder="2:00 PM"
+                  placeholderTextColor={Colors.textLight}
+                  testID="booking-time"
+                />
+              </View>
+            </View>
+            <View style={styles.bookingQuickRow}>
+              {[1, 2, 4].map((weeks) => {
+                const d = new Date();
+                d.setDate(d.getDate() + weeks * 7);
+                const value = d.toISOString().split('T')[0];
+                return (
+                  <Pressable key={weeks} style={styles.bookingQuickChip} onPress={() => { setBookingDate(value); setBookingError(undefined); }}>
+                    <Text style={styles.bookingQuickText}>In {weeks} week{weeks > 1 ? 's' : ''}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.bookingLabel}>Notes for the owner (optional)</Text>
+            <TextInput
+              style={[styles.bookingInput, styles.bookingNotes]}
+              value={bookingNotes}
+              onChangeText={setBookingNotes}
+              placeholder="Arrival date, flight number, questions…"
+              placeholderTextColor={Colors.textLight}
+              multiline
+              testID="booking-notes"
+            />
+
+            {bookingError ? <Text style={styles.bookingError}>{bookingError}</Text> : null}
+
+            <Pressable style={styles.bookingConfirm} onPress={handleConfirmBooking} testID="booking-confirm">
+              <Text style={styles.bookingConfirmText}>Request Booking</Text>
+            </Pressable>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -510,6 +595,29 @@ const styles = StyleSheet.create({
   heroImage: { width: width, height: 320 },
   imageOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   backButton: { padding: 16 },
+  abroadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginHorizontal: 20, marginBottom: 8, paddingVertical: 8, borderRadius: 12, backgroundColor: Colors.primaryLight },
+  abroadText: { fontSize: 12, fontWeight: '600' as const, color: Colors.primary, flex: 1, flexShrink: 1 },
+  bookingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' as const },
+  bookingSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  bookingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  bookingTitle: { fontSize: 20, fontWeight: '800' as const, color: Colors.text, flex: 1, marginRight: 12 },
+  bookingSubtitle: { fontSize: 13, color: Colors.textSecondary, marginBottom: 16, lineHeight: 19 },
+  bookingTypeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  bookingTypeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background },
+  bookingTypeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primary },
+  bookingTypeText: { fontSize: 12, fontWeight: '700' as const, color: Colors.primary, flexShrink: 1 },
+  bookingTypeTextActive: { color: Colors.white },
+  bookingRow: { flexDirection: 'row', gap: 10 },
+  bookingField: { flex: 1 },
+  bookingLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary, marginBottom: 6 },
+  bookingInput: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: Colors.text, backgroundColor: Colors.background },
+  bookingQuickRow: { flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 14 },
+  bookingQuickChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: Colors.primaryLight },
+  bookingQuickText: { fontSize: 11, fontWeight: '600' as const, color: Colors.primary },
+  bookingNotes: { height: 70, paddingTop: 10, textAlignVertical: 'top' as const, marginBottom: 14 },
+  bookingError: { color: Colors.error, fontSize: 13, fontWeight: '600' as const, marginBottom: 10 },
+  bookingConfirm: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' as const },
+  bookingConfirmText: { color: Colors.white, fontSize: 16, fontWeight: '700' as const },
   backButtonOverlay: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   imageActions: { flexDirection: 'row', gap: 8 },
   actionButtonOverlay: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
@@ -574,13 +682,8 @@ const styles = StyleSheet.create({
   bottomActions: { flexDirection: 'row', gap: 10 },
   scheduleButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primaryLight },
   scheduleText: { fontSize: 14, fontWeight: '600' as const, color: Colors.primary },
-  whatsappButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: '#25D366' },
-  whatsappIcon: { fontSize: 16 },
-  whatsappText: { fontSize: 14, fontWeight: '700' as const, color: Colors.white },
   contactButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primary },
   contactText: { fontSize: 14, fontWeight: '600' as const, color: Colors.white },
-  ownerWhatsAppButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#25D366', alignItems: 'center', justifyContent: 'center' },
-  ownerWhatsAppIcon: { fontSize: 18 },
   imageDotsRow: { position: 'absolute' as const, bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
   imageCountBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   imageCountText: { color: Colors.white, fontSize: 12, fontWeight: '600' as const },
@@ -593,8 +696,8 @@ const styles = StyleSheet.create({
   galleryCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   galleryCounter: { fontSize: 16, fontWeight: '600' as const, color: Colors.white },
   galleryScroll: { flex: 1 },
-  gallerySlide: { width: width, flex: 1, justifyContent: 'center', alignItems: 'center' },
-  galleryImage: { width: width, height: screenHeight },
+  gallerySlide: { width: width, justifyContent: 'center', alignItems: 'center' },
+  galleryImage: { width: width, height: screenHeight * 0.65 },
   galleryNavLeft: { position: 'absolute' as const, left: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   galleryNavRight: { position: 'absolute' as const, right: 12, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   galleryFooter: { alignItems: 'center', paddingVertical: 16 },

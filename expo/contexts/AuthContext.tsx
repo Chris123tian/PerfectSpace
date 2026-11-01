@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { User, UserRole } from '@/types/property';
-import { trpc, getBaseUrl } from '@/lib/trpc';
+import { trpc } from '@/lib/trpc';
 
 const CURRENT_USER_KEY = 'ps_current_user';
 
@@ -94,7 +94,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return loginMutation.mutateAsync({ email, password });
   }, [loginMutation]);
 
-  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole; country?: string }) => {
+  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole }) => {
     return signupMutation.mutateAsync(params);
   }, [signupMutation]);
 
@@ -119,7 +119,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       queryKey: [['auth', 'getAllUsers'], { type: 'query' }],
       queryFn: async () => {
         const response = await fetch(
-          `${getBaseUrl()}/api/trpc/auth.getAllUsers`,
+          `${process.env.EXPO_PUBLIC_RORK_API_BASE_URL}/api/trpc/auth.getAllUsers`,
           { headers: { 'Content-Type': 'application/json' } }
         );
         const json = await response.json();

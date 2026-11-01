@@ -56,7 +56,7 @@ export default function MessagesScreen() {
     return (
       <Pressable style={styles.messageCard} onPress={() => handlePress(item)} testID={`conversation-${item.id}`}>
         <View style={styles.avatarContainer}>
-          <SafeImage uri={other.avatar} style={styles.avatar} variant="avatar" role="default" />
+          <SafeImage uri={other.avatar} style={styles.avatar} />
           {unread > 0 && <View style={styles.unreadDot} />}
         </View>
         <View style={styles.messageContent}>

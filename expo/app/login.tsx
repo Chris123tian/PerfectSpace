@@ -14,37 +14,82 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
-import { Eye, EyeOff, ArrowRight, Building2 } from 'lucide-react-native';
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Building2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
+const GOOGLE_DISCOVERY = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+};
+
 export default function LoginScreen() {
-  const {
-    user,
-    login,
-    loginPending: authLoginPending,
-    loginError: authLoginError,
-    resetLoginError,
-    googleAuth,
-    googleAuthPending,
-  } = useAuth();
-  const [localPending, setLocalPending] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  const loginPending = authLoginPending || localPending;
-  const loginError = authLoginError || localError;
-
+  const { login, googleAuth, loginPending, loginError, resetLoginError, googleAuthPending, isAuthenticated } = useAuth();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  if (user) {
+  const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: Platform.OS === 'web' });
+
+  const [_request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: googleClientId ?? '',
+      redirectUri,
+      scopes: ['openid', 'profile', 'email'],
+      responseType: AuthSession.ResponseType.Token,
+    },
+    GOOGLE_DISCOVERY
+  );
+
+  const handleGoogleResponse = useCallback(async (accessToken: string) => {
+    try {
+      console.log('[Login] Fetching Google user info...');
+      const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const userInfo = await userInfoRes.json();
+      console.log('[Login] Google user info:', userInfo.email, userInfo.name);
+
+      await googleAuth({
+        email: userInfo.email,
+        name: userInfo.name ?? 'Google User',
+        avatar: userInfo.picture,
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/');
+    } catch (e: unknown) {
+      console.log('[Login] Google auth error:', e);
+      const msg = e instanceof Error ? e.message : 'Failed to sign in with Google';
+      Alert.alert('Google Sign-In Failed', msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [googleAuth]);
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.authentication?.accessToken) {
+      console.log('[Login] Google OAuth success, got access token');
+      void handleGoogleResponse(response.authentication.accessToken);
+    } else if (response?.type === 'error') {
+      console.log('[Login] Google OAuth error:', response.error);
+      setGoogleLoading(false);
+      Alert.alert('Google Sign-In Error', 'Authentication failed. Please try again.');
+    } else if (response?.type === 'dismiss') {
+      setGoogleLoading(false);
+    }
+  }, [response, handleGoogleResponse]);
+
+  if (isAuthenticated) {
     return <Redirect href="/" />;
   }
 
@@ -69,37 +114,50 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     resetLoginError();
-    setLocalError(null);
     if (!validate()) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake();
       return;
     }
-    setLocalPending(true);
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await login({ email: email.trim(), password });
-    } catch (e: any) {
-      setLocalError(e?.message || 'Login failed');
+      router.replace('/');
+    } catch {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake();
-    } finally {
-      setLocalPending(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
+    if (!googleClientId) {
+      Alert.alert(
+        'Google Sign-In',
+        'Google Sign-In requires a Google OAuth Client ID. Please configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your environment variables.\n\nYou can get one from the Google Cloud Console.',
+        [
+          { text: 'Sign Up Instead', onPress: () => router.push('/signup') },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await googleAuth({
-        email: 'google.user@example.com',
-        name: 'Google User',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-      });
+      void promptAsync();
     } catch (e) {
-      console.log('[Login] Google login error:', e);
-      Alert.alert('Google Sign-In Failed', 'Unable to sign in with Google.');
+      console.log('[Login] Google prompt error:', e);
+      setGoogleLoading(false);
+      Alert.alert('Error', 'Failed to open Google Sign-In. Please try again.');
     }
   };
+
+  const handleGoBack = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (router.canDismiss()) router.dismiss();
+    else router.replace('/');
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -114,6 +172,9 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.heroSection}>
+              <Pressable style={styles.heroBackButton} onPress={handleGoBack} testID="login-back" accessibilityLabel="Back to home">
+                <ArrowLeft size={20} color={Colors.white} />
+              </Pressable>
               <View style={styles.logoContainer}>
                 <Building2 size={36} color={Colors.white} />
               </View>
@@ -168,14 +229,6 @@ export default function LoginScreen() {
               </View>
 
               <Pressable
-                style={styles.forgotPasswordBtn}
-                onPress={() => router.push('/forgot-password')}
-                testID="forgot-password"
-              >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </Pressable>
-
-              <Pressable
                 style={[styles.loginButton, loginPending && styles.loginButtonDisabled]}
                 onPress={handleLogin}
                 disabled={loginPending}
@@ -198,12 +251,12 @@ export default function LoginScreen() {
               </View>
 
               <Pressable
-                style={[styles.googleButton, googleAuthPending && styles.googleButtonDisabled]}
+                style={[styles.googleButton, (googleLoading || googleAuthPending) && styles.googleButtonDisabled]}
                 onPress={handleGoogleSignIn}
-                disabled={googleAuthPending}
+                disabled={googleLoading || googleAuthPending}
                 testID="google-signin"
               >
-                {googleAuthPending ? (
+                {(googleLoading || googleAuthPending) ? (
                   <ActivityIndicator color={Colors.text} />
                 ) : (
                   <>
@@ -213,6 +266,10 @@ export default function LoginScreen() {
                     <Text style={styles.googleButtonText}>Continue with Google</Text>
                   </>
                 )}
+              </Pressable>
+
+              <Pressable style={styles.forgotRow} onPress={() => router.push('/forgot-password')} testID="forgot-password">
+                <Text style={styles.forgotLink}>Forgot Password?</Text>
               </Pressable>
 
               <View style={styles.signupRow}>
@@ -253,6 +310,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 40,
     paddingBottom: 32,
+  },
+  heroBackButton: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   logoContainer: {
     width: 72,
@@ -356,17 +424,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  forgotPasswordBtn: {
-    alignSelf: 'flex-end',
-    marginTop: 6,
-    marginBottom: 4,
-    paddingVertical: 4,
-  },
-  forgotPasswordText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.primary,
-  },
   loginButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -433,6 +490,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
+  },
+  forgotRow: {
+    alignItems: 'center',
+    marginTop: -12,
+    marginBottom: 20,
+  },
+  forgotLink: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    textDecorationLine: 'underline' as const,
   },
   signupRow: {
     flexDirection: 'row',

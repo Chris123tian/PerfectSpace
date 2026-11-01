@@ -258,7 +258,7 @@ export default function AdminScreen() {
       contentContainerStyle={styles.tabContent}
       renderItem={({ item: u }) => (
         <View style={styles.userCard}>
-          <SafeImage uri={u.avatar} style={styles.userAvatar} variant="avatar" role={u.role} />
+          <SafeImage uri={u.avatar} style={styles.userAvatar} />
           <View style={styles.userInfo}>
             <View style={styles.userNameRow}>
               <Text style={styles.userName}>{u.name}</Text>
@@ -306,7 +306,7 @@ export default function AdminScreen() {
       renderItem={({ item: p }) => (
         <View style={styles.pendingCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
-            <SafeImage uri={p.images[0]} style={styles.pendingImage} variant="property" propertyType={p.type} contentFit="cover" />
+            <SafeImage uri={p.images[0]} style={styles.pendingImage} />
             <View style={styles.propInfo}>
               <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.propOwner}>by {p.ownerName}</Text>
@@ -316,7 +316,7 @@ export default function AdminScreen() {
           </Pressable>
           <View style={styles.pendingImages}>
             {p.images.slice(0, 3).map((img, idx) => (
-              <SafeImage key={idx} uri={img} style={styles.pendingThumb} variant="property" propertyType={p.type} contentFit="cover" />
+              <SafeImage key={idx} uri={img} style={styles.pendingThumb} contentFit="cover" />
             ))}
           </View>
           <View style={styles.pendingActions}>
@@ -342,7 +342,7 @@ export default function AdminScreen() {
       renderItem={({ item: p }) => (
         <View style={styles.propCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
-            <SafeImage uri={p.images[0]} style={styles.propImage} variant="property" propertyType={p.type} contentFit="cover" />
+            <SafeImage uri={p.images[0]} style={styles.propImage} />
             <View style={styles.propInfo}>
               <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.propOwner}>by {p.ownerName}</Text>

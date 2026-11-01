@@ -34,7 +34,7 @@ export default function MyReviewsScreen() {
       onPress={() => router.push(`/property/${item.propertyId}`)}
       testID={`review-${item.id}`}
     >
-      <SafeImage uri={getPropertyImage(item.propertyId)} style={styles.cardImage} variant="property" contentFit="cover" />
+      <SafeImage uri={getPropertyImage(item.propertyId)} style={styles.cardImage} contentFit="cover" />
       <View style={styles.cardContent}>
         <Text style={styles.propertyTitle} numberOfLines={1}>{getPropertyTitle(item.propertyId)}</Text>
         <View style={styles.ratingRow}>

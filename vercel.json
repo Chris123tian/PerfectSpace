@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "cd expo && npm install --legacy-peer-deps && npm run build",
+  "buildCommand": "cd expo && npm install --legacy-peer-deps && npx expo export -p web",
   "outputDirectory": "expo/dist",
   "cleanUrls": true,
   "rewrites": [

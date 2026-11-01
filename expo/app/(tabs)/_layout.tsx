@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
-import { Home, Search, MessageCircle, User, Bell } from 'lucide-react-native';
+import { Home, Search, MessageCircle, User } from 'lucide-react-native';
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
@@ -9,6 +10,11 @@ import { useData } from '@/contexts/DataContext';
 export default function TabLayout() {
   const { user, isLoading } = useAuth();
   const { unreadNotificationCount, conversations } = useData();
+  const insets = useSafeAreaInsets();
+
+  // React Navigation injects a default 49px bar height that squashes icons and
+  // labels together on phones; 72px + safe-area fits both comfortably.
+  const tabBarHeight = 72 + insets.bottom;
 
   if (isLoading) {
     return (
@@ -32,12 +38,20 @@ export default function TabLayout() {
           backgroundColor: Colors.white,
           borderTopColor: Colors.borderLight,
           borderTopWidth: 1,
-          paddingTop: 4,
+          height: tabBarHeight,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 8),
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 12,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600' as const,
         },
+        tabBarIconStyle: { marginBottom: 2 },
       }}
     >
       <Tabs.Screen

@@ -30,8 +30,11 @@ interface SafeImageProps {
   testID?: string;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
+/**
+ * Drop-in replacement for expo-image's <Image> with a 3-tier fallback:
+ * valid URL → Unsplash fallback (typed by property type / role) → SVG placeholder.
+ * Guards against broken, transient (blob:/ph:) and missing URIs.
+ */
 export default function SafeImage({
   uri,
   style,
@@ -57,7 +60,7 @@ export default function SafeImage({
   }, [uri, variant, role, propertyType, placeholderUri]);
 
   const [source, setSource] = useState<string>(getResolvedUri);
-  const [errored, setErrored] = useState(false);
+  const [errored, setErrored] = useState<boolean>(false);
 
   const handleError = useCallback(() => {
     if (errored) return; // prevent infinite loop
@@ -81,20 +84,20 @@ export default function SafeImage({
   React.useEffect(() => {
     setErrored(false);
     setSource(getResolvedUri());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uri]);
 
   const isDataUri = source.startsWith('data:');
 
   return (
-    <View style={[styles.container, style as object]}>
+    <View style={[styles.container, style as object]} testID={testID}>
       <Image
         source={isDataUri ? source : { uri: source }}
         style={StyleSheet.absoluteFill}
         contentFit={contentFit}
         transition={transition}
         onError={handleError}
-        testID={testID}
+        accessibilityLabel="Property image"
       />
     </View>
   );

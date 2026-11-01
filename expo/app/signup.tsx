@@ -35,12 +35,9 @@ export default function SignupScreen() {
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
-  const [country, setCountry] = useState<string>('');
   const [role, setRole] = useState<UserRole>('renter');
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -117,10 +114,7 @@ export default function SignupScreen() {
     else if (!email.includes('@')) e.email = 'Enter a valid email';
     if (!password) e.password = 'Password is required';
     else if (password.length < 6) e.password = 'Minimum 6 characters';
-    if (!confirmPassword) e.confirmPassword = 'Please confirm your password';
-    else if (confirmPassword !== password) e.confirmPassword = 'Passwords do not match';
     if (!phone.trim()) e.phone = 'Phone is required';
-    if (!country.trim()) e.country = 'Country is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -134,7 +128,7 @@ export default function SignupScreen() {
     }
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), role, country: country.trim() });
+      await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), role });
       router.replace('/');
     } catch {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -151,28 +145,6 @@ export default function SignupScreen() {
       );
       return;
     }
-
-    // ── Dev bypass ────────────────────────────────────────────────────────────
-    if (googleClientId === 'mock-google-client-id') {
-      setGoogleLoading(true);
-      try {
-        await googleAuth({
-          email: 'google.user@example.com',
-          name: 'Google User',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-          role: role === 'renter' || role === 'landlord' ? role : 'renter',
-        });
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/');
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Mock Google auth failed';
-        Alert.alert('Sign-Up Failed', msg);
-      } finally {
-        setGoogleLoading(false);
-      }
-      return;
-    }
-    // ─────────────────────────────────────────────────────────────────────────
 
     setGoogleLoading(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -299,22 +271,8 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Country *</Text>
-                <TextInput
-                  style={[styles.input, errors.country ? styles.inputError : null]}
-                  placeholder="e.g. Ghana, Nigeria, United States"
-                  placeholderTextColor={Colors.textLight}
-                  value={country}
-                  onChangeText={(t) => { setCountry(t); setErrors(e => ({ ...e, country: '' })); }}
-                  autoCapitalize="words"
-                  testID="signup-country"
-                />
-                {errors.country ? <Text style={styles.fieldError}>{errors.country}</Text> : null}
-              </View>
-
-              <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Password</Text>
-                <View style={[styles.passwordContainer, errors?.password ? styles.inputError : null]}>
+                <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="Min 6 characters"
@@ -329,27 +287,7 @@ export default function SignupScreen() {
                     {showPassword ? <EyeOff size={20} color={Colors.textLight} /> : <Eye size={20} color={Colors.textLight} />}
                   </Pressable>
                 </View>
-                {errors?.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Confirm Password</Text>
-                <View style={[styles.passwordContainer, errors?.confirmPassword ? styles.inputError : null]}>
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Re-enter your password"
-                    placeholderTextColor={Colors.textLight}
-                    value={confirmPassword}
-                    onChangeText={(t) => { setConfirmPassword(t); setErrors(e => ({ ...e, confirmPassword: '' })); }}
-                    secureTextEntry={!showConfirmPassword}
-                    autoComplete="new-password"
-                    testID="signup-confirm-password"
-                  />
-                  <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
-                    {showConfirmPassword ? <EyeOff size={20} color={Colors.textLight} /> : <Eye size={20} color={Colors.textLight} />}
-                  </Pressable>
-                </View>
-                {errors?.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
+                {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
               </View>
 
               <Pressable
