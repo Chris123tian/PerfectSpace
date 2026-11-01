@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
@@ -29,7 +30,7 @@ export default function ProfileScreen() {
 
   const handleLogout = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+    showAlert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log Out', style: 'destructive', onPress: () => { void logout(); router.replace('/login'); } },
     ]);
@@ -93,20 +94,20 @@ export default function ProfileScreen() {
       items: [
         { id: 'notifications', icon: <Bell size={20} color={Colors.categoryOffice} />, label: 'Notifications', subtitle: unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : undefined, action: () => router.push('/notifications'), showArrow: true, badge: unreadNotificationCount || undefined },
         { id: 'reviews', icon: <Star size={20} color={Colors.accent} />, label: 'My Reviews', subtitle: `${user.reviewsCount} reviews`, action: () => router.push('/my-reviews'), showArrow: true },
-        { id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : 'Not verified', action: () => Alert.alert('Verification Status', user.verified ? 'Your identity has been verified. You have a trusted badge on your profile.' : 'To get verified, ensure your profile is complete with a valid phone number and photo. Verification helps build trust with other users.'), showArrow: true },
+        { id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : 'Not verified', action: () => showAlert('Verification Status', user.verified ? 'Your identity has been verified. You have a trusted badge on your profile.' : 'To get verified, ensure your profile is complete with a valid phone number and photo. Verification helps build trust with other users.'), showArrow: true },
       ],
     },
     {
       title: 'Resources',
       items: [
         { id: 'tenant-rights', icon: <FileText size={20} color={Colors.categoryApartment} />, label: 'Tenant Rights Guide', action: () => router.push('/tenant-rights'), showArrow: true },
-        { id: 'emergency', icon: <Phone size={20} color={Colors.error} />, label: 'Emergency Contacts', action: () => Alert.alert('Emergency Support', 'Emergency contacts:\n\n• Police: 911\n• Fire: 911\n• Maintenance: (555) 999-0000\n• Support: (555) 123-HELP'), showArrow: true },
+        { id: 'emergency', icon: <Phone size={20} color={Colors.error} />, label: 'Emergency Contacts', action: () => showAlert('Emergency Support', 'Emergency contacts:\n\n• Police: 911\n• Fire: 911\n• Maintenance: (555) 999-0000\n• Support: (555) 123-HELP'), showArrow: true },
       ],
     },
     {
       title: 'Support',
       items: [
-        { id: 'help', icon: <HelpCircle size={20} color={Colors.textSecondary} />, label: 'Help Center', action: () => Alert.alert('Help', 'Contact us at support@perfectspace.com'), showArrow: true },
+        { id: 'help', icon: <HelpCircle size={20} color={Colors.textSecondary} />, label: 'Help Center', action: () => showAlert('Help', 'Contact us at support@perfectspace.com'), showArrow: true },
         { id: 'settings', icon: <Settings size={20} color={Colors.textSecondary} />, label: 'Settings', action: () => router.push('/settings'), showArrow: true },
       ],
     }

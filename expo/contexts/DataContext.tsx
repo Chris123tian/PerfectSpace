@@ -248,10 +248,14 @@ export const [DataProvider, useData] = createContextHook(() => {
     });
   }, [user, startConversationMutation]);
 
+  // `mutate` is referentially stable, so this callback doesn't change every
+  // render — an unstable version here made chat/[id]'s mark-read effect fire
+  // on every render and loop the query cache into an update-depth crash.
+  const markReadMutate = markConversationReadMutation.mutate;
   const markConversationRead = useCallback((conversationId: string) => {
     if (!user) return;
-    markConversationReadMutation.mutate({ conversationId, userId: user.id });
-  }, [user, markConversationReadMutation]);
+    markReadMutate({ conversationId, userId: user.id });
+  }, [user?.id, markReadMutate]);
 
   const createBooking = useCallback(async (booking: Booking) => {
     return createBookingMutation.mutateAsync({ booking: booking as unknown });

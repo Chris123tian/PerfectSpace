@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
 import {
   View,
   Text,
@@ -11,6 +12,7 @@ import {
   Animated,
   ActivityIndicator,
   Alert,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
@@ -21,6 +23,7 @@ import * as AuthSession from 'expo-auth-session';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types/property';
+import { countryOptions } from '@/lib/countries';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -36,6 +39,10 @@ export default function SignupScreen() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
+  const [dob, setDob] = useState<string>('');
+  const [country, setCountry] = useState<string>('Ghana');
+  const [region, setRegion] = useState<string>('');
+  const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
   const [role, setRole] = useState<UserRole>('renter');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -75,7 +82,7 @@ export default function SignupScreen() {
     } catch (e: unknown) {
       console.log('[Signup] Google auth error:', e);
       const msg = e instanceof Error ? e.message : 'Failed to sign up with Google';
-      Alert.alert('Google Sign-Up Failed', msg);
+      showAlert('Google Sign-Up Failed', msg);
     } finally {
       setGoogleLoading(false);
     }
@@ -88,7 +95,7 @@ export default function SignupScreen() {
     } else if (response?.type === 'error') {
       console.log('[Signup] Google OAuth error:', response.error);
       setGoogleLoading(false);
-      Alert.alert('Google Sign-Up Error', 'Authentication failed. Please try again.');
+      showAlert('Google Sign-Up Error', 'Authentication failed. Please try again.');
     } else if (response?.type === 'dismiss') {
       setGoogleLoading(false);
     }
@@ -115,6 +122,7 @@ export default function SignupScreen() {
     if (!password) e.password = 'Password is required';
     else if (password.length < 6) e.password = 'Minimum 6 characters';
     if (!phone.trim()) e.phone = 'Phone is required';
+    if (dob.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(dob.trim())) e.dob = 'Use the format YYYY-MM-DD';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -128,7 +136,16 @@ export default function SignupScreen() {
     }
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), role });
+      await signup({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        phone: phone.trim(),
+        role,
+        dob: dob.trim() || undefined,
+        country: country || undefined,
+        region: region.trim() || undefined,
+      });
       router.replace('/');
     } catch {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -138,7 +155,7 @@ export default function SignupScreen() {
 
   const handleGoogleSignUp = async () => {
     if (!googleClientId) {
-      Alert.alert(
+      showAlert(
         'Google Sign-Up',
         'Google Sign-Up requires a Google OAuth Client ID. Please configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your environment variables.\n\nYou can get one from the Google Cloud Console.',
         [{ text: 'OK', style: 'cancel' }]
@@ -153,12 +170,19 @@ export default function SignupScreen() {
     } catch (e) {
       console.log('[Signup] Google prompt error:', e);
       setGoogleLoading(false);
-      Alert.alert('Error', 'Failed to open Google Sign-Up. Please try again.');
+      showAlert('Error', 'Failed to open Google Sign-Up. Please try again.');
     }
   };
 
   return (
     <View style={styles.container}>
+      <ImageBackground
+        source={{ uri: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80' }}
+        style={StyleSheet.absoluteFill}
+        imageStyle={{ resizeMode: 'cover' }}
+      >
+        <View style={styles.heroOverlay} />
+      </ImageBackground>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -271,6 +295,65 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Date of Birth</Text>
+                <TextInput
+                  style={[styles.input, errors.dob ? styles.inputError : null]}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={Colors.textLight}
+                  value={dob}
+                  onChangeText={(t) => { setDob(t); setErrors(e => ({ ...e, dob: '' })); }}
+                  testID="signup-dob"
+                />
+                {errors.dob ? <Text style={styles.fieldError}>{errors.dob}</Text> : null}
+              </View>
+
+              <View style={styles.rowTwo}>
+                <View style={[styles.inputGroup, styles.halfGroup]}>
+                  <Text style={styles.inputLabel}>Country</Text>
+                  <Pressable
+                    style={[styles.input, styles.countrySelector]}
+                    onPress={() => setShowCountryPicker(!showCountryPicker)}
+                    testID="signup-country"
+                  >
+                    <Text style={styles.countryValue}>{country || 'Select country'}</Text>
+                    <Text style={styles.countryArrow}>{showCountryPicker ? '\u25B2' : '\u25BC'}</Text>
+                  </Pressable>
+                  {showCountryPicker && (
+                    <View style={styles.countryDropdown}>
+                      <ScrollView nestedScrollEnabled style={styles.countryScrollList} showsVerticalScrollIndicator>
+                        {countryOptions.map((opt) => (
+                          <Pressable
+                            key={opt.name}
+                            style={[styles.countryOption, country === opt.name && styles.countryOptionActive]}
+                            onPress={() => {
+                              setCountry(opt.name);
+                              setShowCountryPicker(false);
+                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }}
+                          >
+                            <Text style={[styles.countryOptionText, country === opt.name && styles.countryOptionTextActive]}>
+                              {opt.flag}  {opt.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+                <View style={[styles.inputGroup, styles.halfGroup]}>
+                  <Text style={styles.inputLabel}>Region / State</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Greater Accra"
+                    placeholderTextColor={Colors.textLight}
+                    value={region}
+                    onChangeText={setRegion}
+                    testID="signup-region"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Password</Text>
                 <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
                   <TextInput
@@ -308,7 +391,7 @@ export default function SignupScreen() {
 
               <View style={styles.loginRow}>
                 <Text style={styles.loginText}>Already have an account? </Text>
-                <Pressable onPress={() => router.back()} testID="go-login">
+                <Pressable onPress={() => router.replace('/login')} testID="go-login">
                   <Text style={styles.loginLink}>Sign In</Text>
                 </Pressable>
               </View>
@@ -327,6 +410,10 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(16,42,67,0.6)',
   },
   keyboardView: {
     flex: 1,
@@ -549,5 +636,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.primary,
+  },
+  rowTwo: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  halfGroup: {
+    flex: 1,
+  },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countryValue: {
+    fontSize: 16,
+    color: Colors.text,
+  },
+  countryArrow: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  countryDropdown: {
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  countryScrollList: {
+    maxHeight: 200,
+  },
+  countryOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  countryOptionActive: {
+    backgroundColor: Colors.primaryLight,
+  },
+  countryOptionText: {
+    fontSize: 14,
+    color: Colors.text,
+  },
+  countryOptionTextActive: {
+    color: Colors.primary,
+    fontWeight: '600' as const,
   },
 });

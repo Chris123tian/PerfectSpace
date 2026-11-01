@@ -6,6 +6,8 @@ import {
   Pressable,
   Animated,
   useWindowDimensions,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import SafeImage from '@/components/SafeImage';
 import { Star, MapPin, Bed, Bath, Maximize } from 'lucide-react-native';
@@ -17,9 +19,10 @@ import { Property } from '@/types/property';
 interface PropertyCardProps {
   property: Property;
   compact?: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-function PropertyCard({ property, compact = false }: PropertyCardProps) {
+function PropertyCard({ property, compact = false, containerStyle }: PropertyCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const { width: screenWidth } = useWindowDimensions();
   const isWide = screenWidth > 600;
@@ -108,6 +111,7 @@ function PropertyCard({ property, compact = false }: PropertyCardProps) {
       <Animated.View style={[
         styles.card,
         isWide && styles.cardWide,
+        containerStyle,
         { transform: [{ scale: scaleAnim }] },
       ]}>
         <View style={[styles.imageContainer, isWide && styles.imageContainerWide]}>

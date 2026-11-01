@@ -109,6 +109,55 @@ export const conversationsRouter = createTRPCRouter({
       return newConv.id;
     }),
 
+  startSupportConversation: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        userName: z.string(),
+        userAvatar: z.string(),
+        initialMessage: z.string(),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Chat] Support conversation requested by:", input.userName);
+      const admin = store.users.find((u) => u.role === "admin" && u.isActive);
+      if (!admin) throw new Error("Support is unavailable right now. Try again later.");
+
+      const propertyId = "support";
+      const existing = store.conversations.find(
+        (c) =>
+          c.participantIds.includes(input.userId) &&
+          c.participantIds.includes(admin.id) &&
+          c.propertyId === propertyId
+      );
+      if (existing) return existing.id;
+
+      const newConv: Conversation = {
+        id: store.generateId("conv"),
+        participantIds: [input.userId, admin.id],
+        participantNames: [input.userName, "Perfect Space Support"],
+        participantAvatars: [input.userAvatar, admin.avatar],
+        propertyId,
+        propertyTitle: "Customer Support",
+        propertyImage: "",
+        lastMessage: input.initialMessage,
+        lastMessageTime: new Date().toISOString(),
+        unreadCount: { [input.userId]: 0, [admin.id]: 1 },
+      };
+
+      const newMsg: ChatMessage = {
+        id: store.generateId("cm"),
+        conversationId: newConv.id,
+        senderId: input.userId,
+        text: input.initialMessage,
+        timestamp: new Date().toISOString(),
+      };
+
+      store.conversations.unshift(newConv);
+      store.chatMessages.push(newMsg);
+      return newConv.id;
+    }),
+
   markRead: publicProcedure
     .input(z.object({ conversationId: z.string(), userId: z.string() }))
     .mutation(({ input }) => {

@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Alert,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +22,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { PropertyType, ListingType } from '@/types/property';
+import { countryOptions, findCountry } from '@/lib/countries';
+import { useFilters } from '@/contexts/FilterContext';
 
 const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }[] = [
   { key: 'apartment', label: 'Apartment', icon: <Building2 size={20} color={Colors.categoryApartment} /> },
@@ -32,27 +33,17 @@ const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }
   { key: 'hotel', label: 'Hotel', icon: <ConciergeBell size={20} color={Colors.categoryHotel} /> },
 ];
 
-const priceRanges = [
-  { label: 'Any', min: 0, max: Infinity },
-  { label: '$0 - $500', min: 0, max: 500 },
-  { label: '$500 - $1,000', min: 500, max: 1000 },
-  { label: '$1,000 - $2,000', min: 1000, max: 2000 },
-  { label: '$2,000 - $5,000', min: 2000, max: 5000 },
-  { label: '$5,000+', min: 5000, max: Infinity },
-];
-
 const bedroomOptions = [0, 1, 2, 3, 4];
 
-const cities = ['Any', 'New York', 'San Francisco', 'Boston', 'Austin', 'Chicago'];
-
 export default function FiltersScreen() {
-  const [selectedTypes, setSelectedTypes] = useState<PropertyType[]>([]);
-  const [listingType, setListingType] = useState<ListingType | null>(null);
-  const [selectedPriceRange, setSelectedPriceRange] = useState<number>(0);
-  const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(null);
-  const [selectedCity, setSelectedCity] = useState<string>('Any');
-  const [minPrice, setMinPrice] = useState<string>('');
-  const [maxPrice, setMaxPrice] = useState<string>('');
+  const { filters, applyFilters } = useFilters();
+  const [selectedTypes, setSelectedTypes] = useState<PropertyType[]>(filters.types);
+  const [listingType, setListingType] = useState<ListingType | null>(filters.listingType);
+  const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(filters.bedrooms);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(filters.country);
+  const [currency, setCurrency] = useState<string | null>(filters.currency);
+  const [minPrice, setMinPrice] = useState<string>(filters.minPrice !== null ? String(filters.minPrice) : '');
+  const [maxPrice, setMaxPrice] = useState<string>(filters.maxPrice !== null ? String(filters.maxPrice) : '');
 
   const handleToggleType = useCallback((type: PropertyType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -65,30 +56,31 @@ export default function FiltersScreen() {
 
   const handleApply = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    console.log('Filters applied:', {
-      types: selectedTypes,
+    applyFilters({
       listingType,
-      priceRange: priceRanges[selectedPriceRange],
+      types: selectedTypes,
+      country: selectedCountry,
+      minPrice: minPrice.trim() ? Number(minPrice) : null,
+      maxPrice: maxPrice.trim() ? Number(maxPrice) : null,
+      currency,
       bedrooms: selectedBedrooms,
-      city: selectedCity,
-      customMin: minPrice,
-      customMax: maxPrice,
     });
-    Alert.alert('Filters Applied', 'Your search filters have been updated!', [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
-  }, [selectedTypes, listingType, selectedPriceRange, selectedBedrooms, selectedCity, minPrice, maxPrice]);
+    router.back();
+  }, [applyFilters, listingType, selectedTypes, selectedCountry, minPrice, maxPrice, currency, selectedBedrooms]);
 
   const handleReset = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedTypes([]);
     setListingType(null);
-    setSelectedPriceRange(0);
     setSelectedBedrooms(null);
-    setSelectedCity('Any');
+    setSelectedCountry(null);
+    setCurrency(null);
     setMinPrice('');
     setMaxPrice('');
   }, []);
+
+  const activeCurrency = findCountry(selectedCountry ?? undefined)?.symbol ??
+    (currency ? countryOptions.find(c => c.currency === currency)?.symbol : null);
 
   return (
     <View style={styles.container}>
@@ -166,28 +158,44 @@ export default function FiltersScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Price Range</Text>
-          <View style={styles.priceRangeGrid}>
-            {priceRanges.map((range, idx) => (
+          <Text style={styles.sectionTitle}>Country</Text>
+          <Text style={styles.sectionHint}>Search listings in a specific market</Text>
+          <View style={styles.cityGrid}>
+            {countryOptions.map((c) => (
               <Pressable
-                key={idx}
-                style={[styles.priceChip, selectedPriceRange === idx && styles.priceChipActive]}
+                key={c.name}
+                style={[styles.cityChip, selectedCountry === c.name && styles.cityChipActive]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedPriceRange(idx);
+                  setSelectedCountry(prev => {
+                    const next = prev === c.name ? null : c.name;
+                    setCurrency(next ? c.currency : null);
+                    return next;
+                  });
                 }}
-                testID={`filter-price-${idx}`}
+                testID={`filter-country-${c.name.replace(/\s+/g, '-')}`}
               >
-                <Text style={[styles.priceChipText, selectedPriceRange === idx && styles.priceChipTextActive]}>
-                  {range.label}
+                <Text style={[styles.cityChipText, selectedCountry === c.name && styles.cityChipTextActive]}>
+                  {c.flag} {c.name}
                 </Text>
               </Pressable>
             ))}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Price Range{activeCurrency ? ` (${activeCurrency})` : ''}
+          </Text>
+          <Text style={styles.sectionHint}>
+            {selectedCountry
+              ? `Prices in ${findCountry(selectedCountry)?.currency ?? ''} — matching listings only`
+              : 'Pick a country to filter in its own currency'}
+          </Text>
           <View style={styles.customPriceRow}>
             <TextInput
               style={styles.priceInput}
-              placeholder="Min $"
+              placeholder={activeCurrency ? `Min ${activeCurrency}` : 'Min'}
               placeholderTextColor={Colors.textLight}
               keyboardType="numeric"
               value={minPrice}
@@ -197,7 +205,7 @@ export default function FiltersScreen() {
             <View style={styles.priceDash} />
             <TextInput
               style={styles.priceInput}
-              placeholder="Max $"
+              placeholder={activeCurrency ? `Max ${activeCurrency}` : 'Max'}
               placeholderTextColor={Colors.textLight}
               keyboardType="numeric"
               value={maxPrice}
@@ -222,27 +230,6 @@ export default function FiltersScreen() {
               >
                 <Text style={[styles.bedroomChipText, selectedBedrooms === num && styles.bedroomChipTextActive]}>
                   {num === 0 ? 'Any' : num === 4 ? '4+' : num.toString()}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>City</Text>
-          <View style={styles.cityGrid}>
-            {cities.map((city) => (
-              <Pressable
-                key={city}
-                style={[styles.cityChip, selectedCity === city && styles.cityChipActive]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedCity(city);
-                }}
-                testID={`filter-city-${city}`}
-              >
-                <Text style={[styles.cityChipText, selectedCity === city && styles.cityChipTextActive]}>
-                  {city}
                 </Text>
               </Pressable>
             ))}
@@ -307,7 +294,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 14,
+    marginBottom: 6,
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: Colors.textLight,
+    marginBottom: 12,
   },
   pillRow: {
     flexDirection: 'row',
@@ -374,32 +366,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  priceRangeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  priceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  priceChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  priceChipText: {
-    fontSize: 13,
-    fontWeight: '500' as const,
-    color: Colors.textSecondary,
-  },
-  priceChipTextActive: {
-    color: Colors.white,
   },
   customPriceRow: {
     flexDirection: 'row',

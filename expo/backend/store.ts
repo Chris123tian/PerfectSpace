@@ -186,7 +186,14 @@ class Store {
   reloadFrom(saved: Partial<PersistedData> | null) {
     if (!saved) return;
     if (saved.users?.length) this.users = saved.users;
-    if (saved.properties?.length) this.properties = saved.properties;
+    if (saved.properties?.length) {
+      // Migration: listings created before the country field existed default
+      // to the seed marketplace so country filters behave predictably.
+      this.properties = saved.properties.map((p) => ({
+        country: "United States",
+        ...p,
+      }) as typeof saved.properties[number]);
+    }
     if (saved.conversations?.length) this.conversations = saved.conversations;
     if (saved.chatMessages?.length) this.chatMessages = saved.chatMessages;
     if (saved.bookings?.length) this.bookings = saved.bookings;
@@ -270,8 +277,12 @@ class Store {
   }
 
   generateId(prefix: string): string {
+    // Collision-proof: never rely on the in-memory counter alone — the DO can
+    // restart with persisted rows created by an older counter, and a fresh
+    // counter would mint duplicate ids and overwrite real users/listings.
     this.idCounter++;
-    return `${prefix}_${this.idCounter.toString(36)}`;
+    const random = Math.random().toString(36).slice(2, 8);
+    return `${prefix}_${Date.now().toString(36)}${random}`;
   }
 
   /** Debounced so bursts of mutations write once, not per keystroke. */

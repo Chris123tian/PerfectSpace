@@ -1,25 +1,68 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, FlatList } from 'react-native';
+import { showAlert } from '@/lib/alert';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, FlatList, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
 import {
   ArrowLeft, Users, Building2, Calendar, Shield, ShieldOff,
-  Trash2, Star, Eye, ChevronRight, TrendingUp, UserCheck, UserX,
+  Trash2, Star, Eye, ChevronRight, TrendingUp, UserCheck, UserX, BadgeCheck,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import { trpc } from '@/lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
 import { User, Property } from '@/types/property';
 
-type AdminTab = 'overview' | 'users' | 'properties' | 'pending';
+type AdminTab = 'overview' | 'users' | 'properties' | 'pending' | 'verifications';
 
 export default function AdminScreen() {
-  const { user, getAllUsers, updateUserAdmin } = useAuth();
+  const { user, isLoading: authLoading, getAllUsers, updateUserAdmin } = useAuth();
   const { properties, pendingProperties, allBookings, updateProperty, deleteProperty, approveProperty, rejectProperty } = useData();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const queryClient = useQueryClient();
+  const { width: winWidth } = useWindowDimensions();
+  const isWide = winWidth >= 768;
+  const contentMax = isWide ? 760 : undefined;
+
+  const reviewVerificationMutation = trpc.auth.reviewVerification.useMutation({
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      void loadUsers();
+    },
+  });
+
+  const pendingVerifications = useMemo(
+    () => allUsers.filter(u => u.verification?.status === 'pending'),
+    [allUsers]
+  );
+
+  const handleReviewVerification = useCallback((targetUser: User, approve: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const action = approve ? 'Approve' : 'Reject';
+    showAlert(
+      `${action} Verification`,
+      `${approve ? 'Approve' : 'Reject'} ${targetUser.name}'s ${targetUser.verification?.documentType ?? 'document'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: action,
+          style: approve ? 'default' : 'destructive',
+          onPress: async () => {
+            try {
+              await reviewVerificationMutation.mutateAsync({ userId: targetUser.id, approve });
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e) {
+              console.log('[Admin] Verification review error:', e);
+            }
+          },
+        },
+      ]
+    );
+  }, [reviewVerificationMutation]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -49,7 +92,7 @@ export default function AdminScreen() {
   const handleToggleUserActive = useCallback(async (targetUser: User) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const action = targetUser.isActive ? 'deactivate' : 'activate';
-    Alert.alert(
+    showAlert(
       `${action.charAt(0).toUpperCase() + action.slice(1)} User`,
       `Are you sure you want to ${action} ${targetUser.name}?`,
       [
@@ -83,7 +126,7 @@ export default function AdminScreen() {
 
   const handleApproveProperty = useCallback(async (property: Property) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Approve Property', `Approve "${property.title}" to go live?`, [
+    showAlert('Approve Property', `Approve "${property.title}" to go live?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Approve',
@@ -101,7 +144,7 @@ export default function AdminScreen() {
 
   const handleRejectProperty = useCallback(async (property: Property) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Reject Property', `Reject "${property.title}"?`, [
+    showAlert('Reject Property', `Reject "${property.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reject', style: 'destructive',
@@ -128,7 +171,7 @@ export default function AdminScreen() {
 
   const handleDeleteProperty = useCallback(async (property: Property) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Delete Property', `Delete "${property.title}"?`, [
+    showAlert('Delete Property', `Delete "${property.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
@@ -143,6 +186,14 @@ export default function AdminScreen() {
       },
     ]);
   }, [deleteProperty]);
+
+  if (authLoading) {
+    return (
+      <View style={[styles.container, styles.deniedState]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   if (user?.role !== 'admin') {
     return (
@@ -163,7 +214,7 @@ export default function AdminScreen() {
   }
 
   const renderOverview = () => (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}>
       <Text style={styles.sectionTitle}>Platform Stats</Text>
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { backgroundColor: Colors.primary + '10' }]}>
@@ -251,11 +302,68 @@ export default function AdminScreen() {
     </ScrollView>
   );
 
+  const renderVerifications = () => (
+    <FlatList
+      data={pendingVerifications}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}
+      ListEmptyComponent={
+        <View style={styles.emptyPending}>
+          <BadgeCheck size={48} color={Colors.success} />
+          <Text style={styles.emptyPendingTitle}>No pending verifications</Text>
+          <Text style={styles.emptyPendingSubtitle}>Landlord identity checks will appear here</Text>
+        </View>
+      }
+      renderItem={({ item: u }) => (
+        <View style={styles.verifCard}>
+          <View style={styles.verifHeader}>
+            <SafeImage uri={u.avatar} style={styles.userAvatar} />
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{u.name}</Text>
+              <Text style={styles.userEmail}>{u.email}</Text>
+            </View>
+            <View style={styles.verifDocBadge}>
+              <Text style={styles.verifDocText}>{u.verification?.documentType ?? 'Document'}</Text>
+            </View>
+          </View>
+          <View style={styles.verifBody}>
+            <View style={styles.verifDetailRow}>
+              <Text style={styles.verifDetailLabel}>Name on document</Text>
+              <Text style={styles.verifDetailValue}>{u.verification?.documentName ?? '-'}</Text>
+            </View>
+            {!!u.verification?.documentNumber && (
+              <View style={styles.verifDetailRow}>
+                <Text style={styles.verifDetailLabel}>Document number</Text>
+                <Text style={styles.verifDetailValue}>{u.verification.documentNumber}</Text>
+              </View>
+            )}
+            {u.verification?.documentName?.toLowerCase() !== u.name.toLowerCase() && (
+              <Text style={styles.verifMismatch}>Name does not match the account — review carefully.</Text>
+            )}
+            {!!u.verification?.documentImage && (
+              <SafeImage uri={u.verification.documentImage} style={styles.verifImage} contentFit="cover" />
+            )}
+          </View>
+          <View style={styles.pendingActions}>
+            <Pressable style={styles.rejectBtn} onPress={() => handleReviewVerification(u, false)} testID={`verif-reject-${u.id}`}>
+              <ShieldOff size={16} color={Colors.error} />
+              <Text style={styles.rejectBtnText}>Reject</Text>
+            </Pressable>
+            <Pressable style={styles.approveBtn} onPress={() => handleReviewVerification(u, true)} testID={`verif-approve-${u.id}`}>
+              <BadgeCheck size={16} color={Colors.white} />
+              <Text style={styles.approveBtnText}>Approve</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+    />
+  );
+
   const renderUsers = () => (
     <FlatList
       data={allUsers}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.tabContent}
+      contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}
       renderItem={({ item: u }) => (
         <View style={styles.userCard}>
           <SafeImage uri={u.avatar} style={styles.userAvatar} />
@@ -295,7 +403,7 @@ export default function AdminScreen() {
     <FlatList
       data={pendingProperties}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.tabContent}
+      contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}
       ListEmptyComponent={
         <View style={styles.emptyPending}>
           <Shield size={48} color={Colors.success} />
@@ -338,7 +446,7 @@ export default function AdminScreen() {
     <FlatList
       data={properties}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.tabContent}
+      contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}
       renderItem={({ item: p }) => (
         <View style={styles.propCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
@@ -381,15 +489,20 @@ export default function AdminScreen() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.tabBar}>
-          {(['overview', 'pending', 'users', 'properties'] as AdminTab[]).map(tab => (
-            <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users') void loadUsers(); }}>
+          {(['overview', 'pending', 'verifications', 'users', 'properties'] as AdminTab[]).map(tab => (
+            <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users' || tab === 'verifications') void loadUsers(); }} testID={`admin-tab-${tab}`}>
               <View style={styles.tabInner}>
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab === 'pending' ? 'Pending' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]} numberOfLines={1}>
+                  {tab === 'pending' ? 'Pending' : tab === 'verifications' ? 'Verify' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </Text>
                 {tab === 'pending' && pendingProperties.length > 0 && (
                   <View style={styles.tabBadge}>
                     <Text style={styles.tabBadgeText}>{pendingProperties.length}</Text>
+                  </View>
+                )}
+                {tab === 'verifications' && pendingVerifications.length > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{pendingVerifications.length}</Text>
                   </View>
                 )}
               </View>
@@ -400,6 +513,7 @@ export default function AdminScreen() {
 
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'pending' && renderPending()}
+      {activeTab === 'verifications' && renderVerifications()}
       {activeTab === 'users' && renderUsers()}
       {activeTab === 'properties' && renderProperties()}
     </View>
@@ -415,7 +529,7 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12, backgroundColor: Colors.white, gap: 8, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   tab: { flex: 1, paddingVertical: 8, borderRadius: 12, backgroundColor: Colors.background, alignItems: 'center' },
   tabActive: { backgroundColor: Colors.primary },
-  tabText: { fontSize: 14, fontWeight: '600' as const, color: Colors.textSecondary },
+  tabText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
   tabTextActive: { color: Colors.white },
   tabContent: { padding: 20, paddingBottom: 40 },
   deniedState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
@@ -472,4 +586,14 @@ const styles = StyleSheet.create({
   rejectBtnText: { fontSize: 14, fontWeight: '600' as const, color: Colors.error },
   approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.success },
   approveBtnText: { fontSize: 14, fontWeight: '600' as const, color: Colors.white },
+  verifCard: { backgroundColor: Colors.white, borderRadius: 14, overflow: 'hidden', marginBottom: 12, borderLeftWidth: 3, borderLeftColor: Colors.primary },
+  verifHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  verifDocBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: Colors.primaryLight },
+  verifDocText: { fontSize: 11, fontWeight: '700' as const, color: Colors.primary },
+  verifBody: { padding: 12, paddingTop: 0, gap: 8 },
+  verifDetailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  verifDetailLabel: { fontSize: 13, color: Colors.textSecondary },
+  verifDetailValue: { fontSize: 13, fontWeight: '600' as const, color: Colors.text, flexShrink: 1, textAlign: 'right' as const },
+  verifMismatch: { fontSize: 12, fontWeight: '600' as const, color: Colors.warning },
+  verifImage: { width: '100%', height: 140, borderRadius: 10 },
 });

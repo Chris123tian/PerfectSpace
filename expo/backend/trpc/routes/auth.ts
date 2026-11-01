@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { store } from "../../store";
-import { UserRole } from "../../../types/property";
+import { UserRole, UserVerification } from "../../../types/property";
 
 // Never send password hashes/secrets back to the client.
 function sanitizeUser<T extends { password?: string }>(user: T): Omit<T, "password"> {
@@ -35,6 +35,9 @@ export const authRouter = createTRPCRouter({
         password: z.string(),
         phone: z.string(),
         role: z.enum(["renter", "landlord", "admin"]),
+        dob: z.string().optional(),
+        country: z.string().optional(),
+        region: z.string().optional(),
       })
     )
     .mutation(({ input }) => {
@@ -67,6 +70,9 @@ export const authRouter = createTRPCRouter({
         }),
         verified: false,
         isActive: true,
+        dob: input.dob,
+        country: input.country,
+        region: input.region,
       };
 
       store.users.push(newUser);
@@ -181,6 +187,124 @@ export const authRouter = createTRPCRouter({
         id: input.userId,
       } as typeof store.users[0];
       return sanitizeUser(store.users[idx]);
+    }),
+
+  changePassword: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        currentPassword: z.string(),
+        newPassword: z.string(),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Auth] Password change for:", input.userId);
+      const idx = store.users.findIndex((u) => u.id === input.userId);
+      if (idx === -1) throw new Error("User not found");
+      const user = store.users[idx];
+      if ((user.password ?? "") !== input.currentPassword) {
+        throw new Error("Current password is incorrect");
+      }
+      if (input.newPassword.length < 6) {
+        throw new Error("New password must be at least 6 characters");
+      }
+      store.users[idx] = { ...user, password: input.newPassword };
+      return { success: true };
+    }),
+
+  submitVerification: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        documentType: z.string(),
+        documentName: z.string(),
+        documentNumber: z.string().optional(),
+        documentImage: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Auth] Verification submitted by:", input.userId);
+      const idx = store.users.findIndex((u) => u.id === input.userId);
+      if (idx === -1) throw new Error("User not found");
+      const user = store.users[idx];
+
+      // Auto-approve when the name on the document matches the account name.
+      const normalized = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const nameMatches =
+        normalized(input.documentName) === normalized(user.name) &&
+        input.documentName.trim().length > 2;
+      const status = nameMatches ? "approved" : "pending";
+
+      const verification = {
+        status: status as "approved" | "pending",
+        documentType: input.documentType,
+        documentName: input.documentName,
+        documentNumber: input.documentNumber,
+        documentImage: input.documentImage,
+        submittedAt: new Date().toISOString(),
+        reviewedAt: nameMatches ? new Date().toISOString() : undefined,
+      };
+
+      store.users[idx] = {
+        ...user,
+        verification,
+        verified: nameMatches ? true : user.verified,
+      };
+
+      if (!nameMatches) {
+        store.notifications.unshift({
+          id: store.generateId("n"),
+          userId: "admin1",
+          title: "Verification Request",
+          message: `${user.name} submitted a ${input.documentType} for verification.`,
+          type: "system",
+          read: false,
+          createdAt: new Date().toISOString(),
+          data: { userId: user.id },
+        });
+      }
+
+      return store.users[idx];
+    }),
+
+  reviewVerification: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        approve: z.boolean(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      console.log("[Auth] Verification review for:", input.userId, input.approve);
+      const idx = store.users.findIndex((u) => u.id === input.userId);
+      if (idx === -1) throw new Error("User not found");
+      const user = store.users[idx];
+      const verification = {
+        ...(user.verification ?? { status: "pending" }),
+        status: (input.approve ? "approved" : "rejected") as "approved" | "rejected" | "pending",
+        reviewedAt: new Date().toISOString(),
+        rejectionReason: input.approve ? undefined : input.reason,
+      } as UserVerification;
+      store.users[idx] = {
+        ...user,
+        verification,
+        verified: input.approve ? true : false,
+      };
+
+      store.notifications.unshift({
+        id: store.generateId("n"),
+        userId: input.userId,
+        title: input.approve ? "Identity Verified" : "Verification Rejected",
+        message: input.approve
+          ? "Your identity document was approved. You are now a verified member!"
+          : `Your verification was not approved.${input.reason ? ` Reason: ${input.reason}` : ""} You can resubmit with a clearer document.`,
+        type: "system",
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+
+      return store.users[idx];
     }),
 
   getSettings: publicProcedure

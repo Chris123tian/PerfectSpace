@@ -83,6 +83,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     },
   });
 
+  const changePasswordMutation = trpc.auth.changePassword.useMutation();
+
+  const submitVerificationMutation = trpc.auth.submitVerification.useMutation({
+    onSuccess: (data) => {
+      if (user && user.id === data.id) {
+        setUser(data);
+        void AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+      }
+      void queryClient.invalidateQueries();
+    },
+  });
+
   const updateSettingsMutation = trpc.auth.updateSettings.useMutation({
     onSuccess: () => {
       console.log('[Auth] Settings updated');
@@ -94,7 +106,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return loginMutation.mutateAsync({ email, password });
   }, [loginMutation]);
 
-  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole }) => {
+  const signup = useCallback(async (params: { name: string; email: string; password: string; phone: string; role: UserRole; dob?: string; country?: string; region?: string }) => {
     return signupMutation.mutateAsync(params);
   }, [signupMutation]);
 
@@ -143,6 +155,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return updateSettingsMutation.mutateAsync({ userId: user.id, settings });
   }, [user, updateSettingsMutation]);
 
+  const changePassword = useCallback(async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) => {
+    if (!user) throw new Error('Not authenticated');
+    return changePasswordMutation.mutateAsync({ userId: user.id, currentPassword, newPassword });
+  }, [user, changePasswordMutation]);
+
+  const submitVerification = useCallback(async (doc: { documentType: string; documentName: string; documentNumber?: string; documentImage?: string }) => {
+    if (!user) throw new Error('Not authenticated');
+    return submitVerificationMutation.mutateAsync({ userId: user.id, ...doc });
+  }, [user, submitVerificationMutation]);
+
   return useMemo(() => ({
     user,
     isLoading,
@@ -166,6 +188,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     deleteAccount,
     deleteAccountPending: deleteAccountMutation.isPending,
     updateSettings,
+    changePassword,
+    changePasswordPending: changePasswordMutation.isPending,
+    submitVerification,
+    submitVerificationPending: submitVerificationMutation.isPending,
   }), [
     user, isLoading, login, loginMutation.isPending, loginMutation.error, loginMutation.reset,
     signup, signupMutation.isPending, signupMutation.error, signupMutation.reset,

@@ -1,4 +1,19 @@
 export type PropertyType = 'apartment' | 'office' | 'hostel' | 'room' | 'hotel';
+export type RentalDurationUnit = 'month' | 'year' | 'night';
+export type BookingChannel = 'in_app' | 'whatsapp';
+export type VerificationStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
+export interface UserVerification {
+  status: VerificationStatus;
+  documentType?: string;
+  /** Full name exactly as printed on the document. */
+  documentName?: string;
+  documentImage?: string;
+  documentNumber?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+}
 export type ListingType = 'rent' | 'sale';
 export type UserRole = 'renter' | 'landlord' | 'admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
@@ -13,6 +28,17 @@ export interface Property {
   price: number;
   currency: string;
   period?: string;
+  /** Unit the price refers to — drives labels like "per month" / "per night". */
+  durationUnit?: RentalDurationUnit;
+  /** Minimum nights a hotel booking must cover. */
+  minNights?: number;
+  /** Country the property sits in (from the listing's currency selection). */
+  country?: string;
+  /** Landlord contact details shown to renters on the listing. */
+  contactEmail?: string;
+  contactWhatsApp?: string;
+  /** Where bookings for this property should go. */
+  bookingChannel?: BookingChannel;
   bedrooms: number;
   bathrooms: number;
   area: number;
@@ -101,6 +127,11 @@ export interface User {
   memberSince: string;
   verified: boolean;
   isActive: boolean;
+  dob?: string;
+  country?: string;
+  region?: string;
+  whatsapp?: string;
+  verification?: UserVerification;
 }
 
 export interface Booking {

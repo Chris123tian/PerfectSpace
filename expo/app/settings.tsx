@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, TextInput, Platform } from 'react-native';
+import { showAlert } from '@/lib/alert';
+import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, TextInput, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, ChevronRight, Bell, Lock, Globe, Trash2, Info, Shield, Moon, Eye, EyeOff } from 'lucide-react-native';
@@ -9,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 
 export default function SettingsScreen() {
-  const { user, updateProfile, updateSettings, deleteAccount, deleteAccountPending } = useAuth();
+  const { user, updateSettings, deleteAccount, deleteAccountPending, changePassword, changePasswordPending } = useAuth();
   const [showPasswordForm, setShowPasswordForm] = useState<boolean>(false);
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -51,7 +52,7 @@ export default function SettingsScreen() {
     try {
       await updateSettings({ darkMode: v });
       if (v) {
-        Alert.alert('Dark Mode', 'Dark mode preference saved. Full dark mode support coming soon.');
+        showAlert('Dark Mode', 'Dark mode preference saved. Full dark mode support coming soon.');
       }
     } catch (e) {
       console.log('[Settings] Dark mode toggle error:', e);
@@ -60,40 +61,37 @@ export default function SettingsScreen() {
 
   const handleChangePassword = useCallback(async () => {
     if (!currentPassword.trim()) {
-      Alert.alert('Error', 'Please enter your current password.');
-      return;
-    }
-    if (currentPassword !== user?.password) {
-      Alert.alert('Error', 'Current password is incorrect.');
+      showAlert('Error', 'Please enter your current password.');
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters.');
+      showAlert('Error', 'New password must be at least 6 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match.');
+      showAlert('Error', 'New passwords do not match.');
       return;
     }
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await updateProfile({ password: newPassword } as any);
+      await changePassword({ currentPassword, newPassword });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Your password has been updated.');
+      showAlert('Success', 'Your password has been updated.');
       setShowPasswordForm(false);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (e) {
       console.log('[Settings] Password change error:', e);
-      Alert.alert('Error', 'Failed to update password. Please try again.');
+      const msg = e instanceof Error ? e.message : 'Failed to update password. Please try again.';
+      showAlert('Error', msg);
     }
-  }, [currentPassword, newPassword, confirmPassword, user?.password, updateProfile]);
+  }, [currentPassword, newPassword, confirmPassword, changePassword]);
 
   const handleDeleteAccount = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data, properties, and conversations will be permanently deleted.', [
+    showAlert('Delete Account', 'This action is permanent and cannot be undone. All your data, properties, and conversations will be permanently deleted.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
@@ -103,7 +101,7 @@ export default function SettingsScreen() {
             router.replace('/login');
           } catch (e) {
             console.log('[Settings] Delete account error:', e);
-            Alert.alert('Error', 'Failed to delete account. Please try again.');
+            showAlert('Error', 'Failed to delete account. Please try again.');
           }
         },
       },
@@ -210,8 +208,12 @@ export default function SettingsScreen() {
                 secureTextEntry={!showNew}
                 testID="confirm-password"
               />
-              <Pressable style={styles.changePasswordBtn} onPress={handleChangePassword} testID="submit-password">
-                <Text style={styles.changePasswordText}>Update Password</Text>
+              <Pressable style={styles.changePasswordBtn} onPress={handleChangePassword} disabled={changePasswordPending} testID="submit-password">
+                {changePasswordPending ? (
+                  <ActivityIndicator color={Colors.white} size="small" />
+                ) : (
+                  <Text style={styles.changePasswordText}>Update Password</Text>
+                )}
               </Pressable>
             </View>
           )}
@@ -235,7 +237,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
-          <Pressable style={styles.settingRow} onPress={() => Alert.alert('Perfect Space v1.0.0', 'A modern property rental and sales platform.\n\nBuilt for property owners and renters to connect, list, and discover properties with ease.')}>
+          <Pressable style={styles.settingRow} onPress={() => showAlert('Perfect Space v1.0.0', 'A modern property rental and sales platform.\n\nBuilt for property owners and renters to connect, list, and discover properties with ease.')}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Info size={18} color={Colors.textSecondary} /></View>
               <View>

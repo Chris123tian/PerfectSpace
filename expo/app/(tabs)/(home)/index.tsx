@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
   Dimensions,
+  useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -21,6 +22,8 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import { useFilters } from '@/contexts/FilterContext';
+import { findCountry } from '@/lib/countries';
 import { PropertyType } from '@/types/property';
 import PropertyCard from '@/components/PropertyCard';
 
@@ -34,14 +37,27 @@ const categories: { key: PropertyType | 'all'; label: string; icon: React.ReactN
 ];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SLIDE_WIDTH = SCREEN_WIDTH - 40;
 const SLIDE_SPACING = 12;
+const CONTENT_MAX_WIDTH = 1160;
+const CARD_GAP = 16;
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const { activeProperties } = useData();
+  const { filters } = useFilters();
+  const { width: winWidth } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
+
+  // Desktop/tablet: center a bounded column and lay cards out on a grid.
+  const isWide = winWidth >= 768;
+  const gridCols = winWidth >= 1024 ? 3 : 2;
+  const contentWidth = Math.min(winWidth, CONTENT_MAX_WIDTH);
+  const pageWidth = isWide ? contentWidth : winWidth;
+  const slideWidth = Math.min(winWidth - 40, 720);
+  const cardWidth = isWide
+    ? Math.floor((pageWidth - 40 - CARD_GAP * (gridCols - 1)) / gridCols)
+    : winWidth;
   const scrollY = useRef(new Animated.Value(0)).current;
   const [activeFeaturedIndex, setActiveFeaturedIndex] = useState<number>(0);
   const featuredScrollRef = useRef<FlatList>(null);
@@ -57,6 +73,28 @@ export default function HomeScreen() {
     if (selectedCategory !== 'all') {
       result = result.filter(p => p.type === selectedCategory);
     }
+    if (filters.listingType) {
+      result = result.filter(p => p.listingType === filters.listingType);
+    }
+    if (filters.types.length > 0) {
+      result = result.filter(p => filters.types.includes(p.type));
+    }
+    if (filters.country) {
+      result = result.filter(p => (p.country ?? '').toLowerCase() === filters.country!.toLowerCase());
+    }
+    if (filters.bedrooms !== null && filters.bedrooms > 0) {
+      result = result.filter(p => p.bedrooms >= filters.bedrooms!);
+    }
+    if (filters.minPrice !== null || filters.maxPrice !== null) {
+      const country = filters.country ? findCountry(filters.country) : undefined;
+      const symbol = country?.symbol;
+      result = result.filter(p => {
+        if (symbol && p.currency !== symbol) return false;
+        if (filters.minPrice !== null && p.price < filters.minPrice) return false;
+        if (filters.maxPrice !== null && p.price > filters.maxPrice) return false;
+        return true;
+      });
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -67,7 +105,7 @@ export default function HomeScreen() {
       );
     }
     return result;
-  }, [selectedCategory, searchQuery, activeProperties]);
+  }, [selectedCategory, searchQuery, activeProperties, filters]);
 
   const featuredProperties = useMemo(() => activeProperties.filter(p => p.featured), [activeProperties]);
 
@@ -77,7 +115,7 @@ export default function HomeScreen() {
       setActiveFeaturedIndex(prev => {
         const next = (prev + 1) % featuredProperties.length;
         featuredScrollRef.current?.scrollToOffset({
-          offset: next * (SLIDE_WIDTH + SLIDE_SPACING),
+          offset: next * (slideWidth + SLIDE_SPACING),
           animated: true,
         });
         return next;
@@ -86,13 +124,13 @@ export default function HomeScreen() {
     return () => {
       if (autoScrollTimer.current) clearInterval(autoScrollTimer.current);
     };
-  }, [featuredProperties.length]);
+  }, [featuredProperties.length, slideWidth]);
 
   const handleFeaturedScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / (SLIDE_WIDTH + SLIDE_SPACING));
+    const index = Math.round(offsetX / (slideWidth + SLIDE_SPACING));
     setActiveFeaturedIndex(index);
-  }, []);
+  }, [slideWidth]);
 
   const handleFeaturedTouchStart = useCallback(() => {
     if (autoScrollTimer.current) clearInterval(autoScrollTimer.current);
@@ -104,13 +142,13 @@ export default function HomeScreen() {
       setActiveFeaturedIndex(prev => {
         const next = (prev + 1) % featuredProperties.length;
         featuredScrollRef.current?.scrollToOffset({
-          offset: next * (SLIDE_WIDTH + SLIDE_SPACING),
+          offset: next * (slideWidth + SLIDE_SPACING),
           animated: true,
         });
         return next;
       });
     }, 4000);
-  }, [featuredProperties.length]);
+  }, [featuredProperties.length, slideWidth]);
 
   const formatFeaturedPrice = useCallback((price: number, currency: string, period?: string) => {
     const formatted = price >= 1000000 ? `${(price / 1000000).toFixed(1)}M` : price.toLocaleString();
@@ -134,29 +172,31 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
-              <Text style={styles.greetingBold}>Perfect Space</Text>
+          <View style={[styles.headerInner, isWide && { maxWidth: CONTENT_MAX_WIDTH + 40, alignSelf: 'center', width: '100%' }]}>
+            <View style={styles.headerTop}>
+              <View>
+                <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
+                <Text style={styles.greetingBold}>Perfect Space</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.searchRow}>
-            <View style={styles.searchContainer}>
-              <Search size={18} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search by location, type..."
-                placeholderTextColor={Colors.textLight}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-                testID="search-input"
-              />
+            <View style={styles.searchRow}>
+              <View style={styles.searchContainer}>
+                <Search size={18} color={Colors.textSecondary} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by location, type..."
+                  placeholderTextColor={Colors.textLight}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  testID="search-input"
+                />
+              </View>
+              <Pressable style={styles.filterButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
+                <SlidersHorizontal size={20} color={Colors.white} />
+              </Pressable>
             </View>
-            <Pressable style={styles.filterButton} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/filters'); }} testID="filter-button">
-              <SlidersHorizontal size={20} color={Colors.white} />
-            </Pressable>
           </View>
         </Animated.View>
       </SafeAreaView>
@@ -170,6 +210,7 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         style={styles.scrollView}
       >
+        <View style={[styles.pageInner, { width: isWide ? contentWidth : '100%' }]}>
         {!user && (
           <Pressable
             style={styles.loginBanner}
@@ -263,7 +304,7 @@ export default function HomeScreen() {
               ref={featuredScrollRef}
               horizontal
               pagingEnabled={false}
-              snapToInterval={SLIDE_WIDTH + SLIDE_SPACING}
+              snapToInterval={slideWidth + SLIDE_SPACING}
               snapToAlignment="start"
               decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
@@ -275,7 +316,7 @@ export default function HomeScreen() {
               onTouchEnd={handleFeaturedTouchEnd}
               renderItem={({ item }) => (
                 <Pressable
-                  style={styles.featuredSlide}
+                  style={[styles.featuredSlide, { width: slideWidth }]}
                   onPress={() => {
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     router.push(`/property/${item.id}`);
@@ -338,6 +379,14 @@ export default function HomeScreen() {
               <Text style={styles.emptyTitle}>No properties found</Text>
               <Text style={styles.emptySubtitle}>Try adjusting your search or filters</Text>
             </View>
+          ) : isWide ? (
+            <View style={styles.gridWrap}>
+              {filteredProperties.map((property) => (
+                <View key={property.id} style={{ width: cardWidth }}>
+                  <PropertyCard property={property} containerStyle={{ marginHorizontal: 0, width: '100%' }} />
+                </View>
+              ))}
+            </View>
           ) : (
             filteredProperties.map((property) => (
               <PropertyCard key={property.id} property={property} />
@@ -346,6 +395,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.bottomSpacer} />
+        </View>
       </Animated.ScrollView>
     </View>
   );
@@ -359,6 +409,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
   },
+  headerInner: { width: '100%' },
+  pageInner: { alignSelf: 'center' as const },
+  gridWrap: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: CARD_GAP, paddingHorizontal: 20 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingTop: 8 },
   greeting: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
   greetingBold: { fontSize: 24, fontWeight: '800' as const, color: Colors.text, letterSpacing: -0.5 },
@@ -391,7 +444,7 @@ const styles = StyleSheet.create({
 
   countText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const },
   featuredList: { paddingHorizontal: 20, gap: SLIDE_SPACING },
-  featuredSlide: { width: SLIDE_WIDTH, height: 200, borderRadius: 18, overflow: 'hidden', position: 'relative' as const },
+  featuredSlide: { height: 200, borderRadius: 18, overflow: 'hidden', position: 'relative' as const },
   featuredSlideImage: { width: '100%', height: '100%' },
   featuredSlideOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 18 },
   featuredSlideContent: { ...StyleSheet.absoluteFillObject, padding: 16, justifyContent: 'space-between' },

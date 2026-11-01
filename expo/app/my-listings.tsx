@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
@@ -14,7 +15,7 @@ export default function MyListingsScreen() {
 
   const handleDelete = useCallback((property: Property) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Delete Listing', `Are you sure you want to delete "${property.title}"?`, [
+    showAlert('Delete Listing', `Are you sure you want to delete "${property.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',

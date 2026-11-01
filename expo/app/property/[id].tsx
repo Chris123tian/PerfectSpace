@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
+import { showAlert } from '@/lib/alert';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Alert, Animated, Platform, TextInput, Modal,
+  View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Alert, Animated, Platform, TextInput, Modal, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
-  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, Video, Globe2, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon,
+  ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, Video, Globe2, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Images as ImagesIcon, Mail, ShieldAlert,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -80,13 +81,24 @@ export default function PropertyDetailScreen() {
 
   const handleShare = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert('Share', 'Share this property with friends and family!');
+    showAlert('Share', 'Share this property with friends and family!');
+  }, []);
+
+  const promptSignIn = useCallback(() => {
+    showAlert('Create an account to book', 'Sign up free to reserve your space from anywhere in the world.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign In', onPress: () => router.push('/login') },
+    ]);
   }, []);
 
   const handleContact = useCallback(async () => {
-    if (!property || !user) return;
+    if (!property) return;
+    if (!user) {
+      promptSignIn();
+      return;
+    }
     if (property.ownerId === user.id) {
-      Alert.alert('Info', 'This is your own property.');
+      showAlert('Info', 'This is your own property.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -103,8 +115,31 @@ export default function PropertyDetailScreen() {
       router.push(`/chat/${convId}`);
     } catch (e) {
       console.log('[Property] Contact error:', e);
+      showAlert('Error', 'Could not start the conversation. Please try again.');
     }
-  }, [property, user, startConversation]);
+  }, [property, user, startConversation, promptSignIn]);
+
+  // promptSignIn is defined below; hoist-safe because these callbacks run on press only.
+  const openWhatsApp = useCallback(async () => {
+    if (!property) return;
+    const number = (property.contactWhatsApp ?? '').replace(/[^\d]/g, '');
+    if (!number) {
+      showAlert('No WhatsApp', 'This owner has not added a WhatsApp number.');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const text = encodeURIComponent(`Hi! I'm interested in "${property.title}" on Perfect Space (${property.currency}${property.price.toLocaleString()}${property.period ?? ''}). Is it still available?`);
+    try { await Linking.openURL(`https://wa.me/${number}?text=${text}`); } catch (e) {
+      console.log('[Property] WhatsApp open error:', e);
+    }
+  }, [property]);
+
+  const openOwnerEmail = useCallback(async () => {
+    if (!property?.contactEmail) return;
+    try { await Linking.openURL(`mailto:${property.contactEmail}?subject=${encodeURIComponent(`Interest in ${property.title}`)}`); } catch (e) {
+      console.log('[Property] Email open error:', e);
+    }
+  }, [property]);
 
   const openBookingModal = useCallback((type: 'in_person' | 'video') => {
     if (!property || !user) return;
@@ -118,13 +153,6 @@ export default function PropertyDetailScreen() {
     setShowBookingModal(true);
   }, [property, user]);
 
-  const promptSignIn = useCallback(() => {
-    Alert.alert('Create an account to book', 'Sign up free to reserve your space from anywhere in the world.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign In', onPress: () => router.push('/login') },
-    ]);
-  }, []);
-
   const handleScheduleViewing = useCallback(() => {
     if (!property) return;
     if (!user) {
@@ -132,12 +160,16 @@ export default function PropertyDetailScreen() {
       return;
     }
     if (property.ownerId === user.id) {
-      Alert.alert('Info', 'This is your own property.');
+      showAlert('Info', 'This is your own property.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (property.bookingChannel === 'whatsapp') {
+      void openWhatsApp();
+      return;
+    }
     openBookingModal('in_person');
-  }, [property, user, openBookingModal, promptSignIn]);
+  }, [property, user, openBookingModal, promptSignIn, openWhatsApp]);
 
   const handleBookFromAbroad = useCallback(() => {
     if (!property) return;
@@ -146,12 +178,16 @@ export default function PropertyDetailScreen() {
       return;
     }
     if (property.ownerId === user.id) {
-      Alert.alert('Info', 'This is your own property.');
+      showAlert('Info', 'This is your own property.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (property.bookingChannel === 'whatsapp') {
+      void openWhatsApp();
+      return;
+    }
     openBookingModal('video');
-  }, [property, user, openBookingModal, promptSignIn]);
+  }, [property, user, openBookingModal, promptSignIn, openWhatsApp]);
 
   const handleConfirmBooking = useCallback(async () => {
     if (!property || !user) return;
@@ -184,7 +220,7 @@ export default function PropertyDetailScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowBookingModal(false);
-      Alert.alert(
+      showAlert(
         'Booked!',
         bookingType === 'video'
           ? 'Video tour requested. The owner will confirm the time — you can do this all before you fly in.'
@@ -198,7 +234,7 @@ export default function PropertyDetailScreen() {
 
   const handleSubmitReview = useCallback(async () => {
     if (!id || !reviewComment.trim()) {
-      Alert.alert('Error', 'Please write a review comment.');
+      showAlert('Error', 'Please write a review comment.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -291,6 +327,27 @@ export default function PropertyDetailScreen() {
           </View>
         )}
 
+        <View style={styles.quickActionsRow}>
+          <Pressable
+            style={[styles.quickActionBtn, styles.quickActionSecondary]}
+            onPress={() => openGallery(activeImageIndex)}
+            testID="view-photos"
+          >
+            <ImagesIcon size={18} color={Colors.primary} />
+            <Text style={[styles.quickActionText, styles.quickActionTextSecondary]}>View Photos</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.quickActionBtn, styles.quickActionPrimary]}
+            onPress={handleScheduleViewing}
+            testID="book-below-images"
+          >
+            <Calendar size={18} color={Colors.white} />
+            <Text style={[styles.quickActionText, styles.quickActionTextPrimary]}>
+              {property.bookingChannel === 'whatsapp' ? 'Book via WhatsApp' : 'Book Viewing'}
+            </Text>
+          </Pressable>
+        </View>
+
         <View style={styles.content}>
           <View style={styles.topRow}>
             <View style={[styles.typeBadge, { backgroundColor: typeColors[property.type] }]}>
@@ -362,6 +419,16 @@ export default function PropertyDetailScreen() {
                 <Text style={styles.ownerRole}>Property Owner</Text>
               </View>
               <View style={styles.ownerActions}>
+                {!!property.contactWhatsApp && (
+                  <Pressable style={styles.ownerActionButton} onPress={openWhatsApp} testID="owner-whatsapp">
+                    <MessageCircle size={18} color={Colors.success} />
+                  </Pressable>
+                )}
+                {!!property.contactEmail && (
+                  <Pressable style={styles.ownerActionButton} onPress={openOwnerEmail} testID="owner-email">
+                    <Mail size={18} color={Colors.primary} />
+                  </Pressable>
+                )}
                 <Pressable style={styles.ownerActionButton} onPress={handleContact} testID="message-owner">
                   <MessageCircle size={18} color={Colors.primary} />
                 </Pressable>
@@ -577,6 +644,13 @@ export default function PropertyDetailScreen() {
 
             {bookingError ? <Text style={styles.bookingError}>{bookingError}</Text> : null}
 
+            <View style={styles.noPaymentWarning}>
+              <ShieldAlert size={16} color={Colors.warning} />
+              <Text style={styles.noPaymentText}>
+                No payment needed. Perfect Space never asks for payment — do not send money to anyone before viewing the property and signing a lease.
+              </Text>
+            </View>
+
             <Pressable style={styles.bookingConfirm} onPress={handleConfirmBooking} testID="booking-confirm">
               <Text style={styles.bookingConfirmText}>Request Booking</Text>
             </Pressable>
@@ -624,6 +698,15 @@ const styles = StyleSheet.create({
   imageDots: { position: 'absolute' as const, bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.5)' },
   dotActive: { backgroundColor: Colors.white, width: 24 },
+  quickActionsRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 14 },
+  quickActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
+  quickActionSecondary: { backgroundColor: Colors.primaryLight },
+  quickActionPrimary: { backgroundColor: Colors.primary },
+  quickActionText: { fontSize: 15, fontWeight: '700' as const },
+  quickActionTextSecondary: { color: Colors.primary },
+  quickActionTextPrimary: { color: Colors.white },
+  noPaymentWarning: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: Colors.warning + '14', borderWidth: 1, borderColor: Colors.warning + '35', borderRadius: 12, padding: 12, marginBottom: 14 },
+  noPaymentText: { flex: 1, fontSize: 12, lineHeight: 18, color: Colors.warning, fontWeight: '600' as const },
   content: { paddingHorizontal: 20, paddingTop: 20 },
   topRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   typeBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },

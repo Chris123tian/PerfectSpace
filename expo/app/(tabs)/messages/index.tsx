@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
-import { MessageCircle, Search } from 'lucide-react-native';
+import { MessageCircle, Search, LifeBuoy } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -10,10 +10,36 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Conversation } from '@/types/property';
 import SignInPrompt from '@/components/SignInPrompt';
+import { trpc } from '@/lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function MessagesScreen() {
   const { user } = useAuth();
   const { conversations } = useData();
+  const queryClient = useQueryClient();
+
+  const startSupportMutation = trpc.conversations.startSupportConversation.useMutation({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'list']] });
+      void queryClient.invalidateQueries({ queryKey: [['conversations', 'allMessages']] });
+    },
+  });
+
+  const handleSupport = useCallback(async () => {
+    if (!user) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const convId = await startSupportMutation.mutateAsync({
+        userId: user.id,
+        userName: user.name,
+        userAvatar: user.avatar,
+        initialMessage: 'Hi Perfect Space support, I need help with',
+      });
+      router.push(`/chat/${convId}`);
+    } catch (e) {
+      console.log('[Messages] Support error:', e);
+    }
+  }, [user, startSupportMutation]);
 
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) =>
@@ -82,6 +108,12 @@ export default function MessagesScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Messages</Text>
+          {user && (
+            <Pressable style={styles.supportBtn} onPress={handleSupport} testID="contact-support">
+              <LifeBuoy size={16} color={Colors.primary} />
+              <Text style={styles.supportBtnText}>Support</Text>
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
 
@@ -116,6 +148,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   safeArea: { backgroundColor: Colors.white },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, paddingTop: 8, backgroundColor: Colors.white },
+  supportBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.primaryLight },
+  supportBtnText: { fontSize: 13, fontWeight: '700' as const, color: Colors.primary },
   headerTitle: { fontSize: 28, fontWeight: '800' as const, color: Colors.text },
   listContent: { paddingTop: 8, paddingBottom: 30 },
   messageCard: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: Colors.white, gap: 14, alignItems: 'center' },

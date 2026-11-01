@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
+import { FilterProvider } from "@/contexts/FilterContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,12 +45,14 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <FilterProvider>
           <DataProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <StatusBar style="dark" />
               <RootLayoutNav />
             </GestureHandlerRootView>
           </DataProvider>
+          </FilterProvider>
         </AuthProvider>
       </QueryClientProvider>
     </trpc.Provider>

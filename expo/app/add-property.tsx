@@ -1,15 +1,17 @@
 import React, { useState, useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
-import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell } from 'lucide-react-native';
+import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell, Mail, MessageCircle, CalendarClock, ShieldCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
-import { PropertyType, ListingType, Property } from '@/types/property';
+import { PropertyType, ListingType, Property, RentalDurationUnit, BookingChannel } from '@/types/property';
+import { findCountry } from '@/lib/countries';
 
 interface CurrencyOption {
   country: string;
@@ -92,12 +94,17 @@ export default function AddPropertyScreen() {
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption>(currencyOptions[0]);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
   const [images, setImages] = useState<string[]>([]);
+  const [durationUnit, setDurationUnit] = useState<RentalDurationUnit>('month');
+  const [minNights, setMinNights] = useState<string>('');
+  const [contactEmail, setContactEmail] = useState<string>('');
+  const [contactWhatsApp, setContactWhatsApp] = useState<string>('');
+  const [bookingChannel, setBookingChannel] = useState<BookingChannel>('in_app');
 
   const pickImage = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+        showAlert('Permission Required', 'Please allow access to your photo library to upload images.');
         return;
       }
 
@@ -116,7 +123,7 @@ export default function AddPropertyScreen() {
       }
     } catch (e) {
       console.log('[AddProperty] Image pick error:', e);
-      Alert.alert('Error', 'Failed to pick images. Please try again.');
+      showAlert('Error', 'Failed to pick images. Please try again.');
     }
   }, [images.length]);
 
@@ -124,7 +131,7 @@ export default function AddPropertyScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow camera access to take photos.');
+        showAlert('Permission Required', 'Please allow camera access to take photos.');
         return;
       }
 
@@ -139,7 +146,7 @@ export default function AddPropertyScreen() {
       }
     } catch (e) {
       console.log('[AddProperty] Camera error:', e);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      showAlert('Error', 'Failed to take photo. Please try again.');
     }
   }, []);
 
@@ -154,7 +161,7 @@ export default function AddPropertyScreen() {
       void pickImage();
       return;
     }
-    Alert.alert('Add Photos', 'Choose how to add property images', [
+    showAlert('Add Photos', 'Choose how to add property images', [
       { text: 'Camera', onPress: takePhoto },
       { text: 'Photo Library', onPress: pickImage },
       { text: 'Cancel', style: 'cancel' },
@@ -165,14 +172,29 @@ export default function AddPropertyScreen() {
     if (!user) return;
     if (!title.trim() || !description.trim() || !price.trim() || !address.trim() || !city.trim()) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
+      showAlert('Missing Fields', 'Please fill in all required fields.');
       return;
     }
 
     const finalImages = images.length >= 3 ? images : fallbackImages[type];
+    const isHotel = type === 'hotel';
+    let period: string | undefined;
+    let unit: RentalDurationUnit | undefined;
+    if (listingType === 'rent') {
+      if (isHotel) {
+        period = '/night';
+        unit = 'night';
+      } else if (durationUnit === 'year') {
+        period = '/yr';
+        unit = 'year';
+      } else {
+        period = '/mo';
+        unit = 'month';
+      }
+    }
 
     if (images.length > 0 && images.length < 3) {
-      Alert.alert('More Images Needed', 'Please add at least 3 images for your property, or remove all to use default images.');
+      showAlert('More Images Needed', 'Please add at least 3 images for your property, or remove all to use default images.');
       return;
     }
 
@@ -188,7 +210,13 @@ export default function AddPropertyScreen() {
         listingType,
         price: parseFloat(price) || 0,
         currency: selectedCurrency.symbol,
-        period: listingType === 'rent' ? '/mo' : undefined,
+        period,
+        durationUnit: unit,
+        minNights: isHotel ? (parseInt(minNights) || undefined) : undefined,
+        country: findCountry(selectedCurrency.country)?.name,
+        contactEmail: contactEmail.trim() || undefined,
+        contactWhatsApp: contactWhatsApp.trim() || undefined,
+        bookingChannel,
         bedrooms: parseInt(bedrooms) || 0,
         bathrooms: parseInt(bathrooms) || 1,
         area: parseInt(area) || 0,
@@ -212,16 +240,16 @@ export default function AddPropertyScreen() {
       await addProperty(newProperty);
       console.log('[AddProperty] Property added successfully');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
+      showAlert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e) {
       console.log('[AddProperty] Error:', e);
-      Alert.alert('Error', 'Failed to add property. Please try again.');
+      showAlert('Error', 'Failed to add property. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency]);
+  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency, durationUnit, minNights, contactEmail, contactWhatsApp, bookingChannel]);
 
   return (
     <View style={styles.container}>
@@ -343,7 +371,39 @@ export default function AddPropertyScreen() {
               </ScrollView>
             </View>
           )}
-          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? `Monthly rent in ${selectedCurrency.code}` : `Sale price in ${selectedCurrency.code}`} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
+          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? (type === 'hotel' ? `Price per night in ${selectedCurrency.code}` : durationUnit === 'year' ? `Yearly rent in ${selectedCurrency.code}` : `Monthly rent in ${selectedCurrency.code}`) : `Sale price in ${selectedCurrency.code}`} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
+
+          {listingType === 'rent' && type !== 'hotel' && (
+            <View style={styles.durationBlock}>
+              <Text style={styles.inputLabel}>Rental Duration</Text>
+              <View style={styles.pillRow}>
+                <Pressable
+                  style={[styles.pill, durationUnit === 'month' && styles.pillActive]}
+                  onPress={() => setDurationUnit('month')}
+                  testID="duration-month"
+                >
+                  <CalendarClock size={16} color={durationUnit === 'month' ? Colors.white : Colors.textSecondary} />
+                  <Text style={[styles.pillText, durationUnit === 'month' && styles.pillTextActive]}>Per Month</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.pill, durationUnit === 'year' && styles.pillActive]}
+                  onPress={() => setDurationUnit('year')}
+                  testID="duration-year"
+                >
+                  <CalendarClock size={16} color={durationUnit === 'year' ? Colors.white : Colors.textSecondary} />
+                  <Text style={[styles.pillText, durationUnit === 'year' && styles.pillTextActive]}>Per Year</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {type === 'hotel' && (
+            <View style={styles.durationBlock}>
+              <Text style={styles.sectionHint}>Hotel rooms are priced per night.</Text>
+              <Text style={styles.inputLabel}>Minimum Nights (optional)</Text>
+              <TextInput style={styles.input} value={minNights} onChangeText={setMinNights} placeholder="e.g. 2" placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="min-nights" />
+            </View>
+          )}
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
@@ -372,6 +432,41 @@ export default function AddPropertyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Amenities</Text>
           <TextInput style={styles.input} value={amenities} onChangeText={setAmenities} placeholder="WiFi, Parking, Pool (comma-separated)" placeholderTextColor={Colors.textLight} />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contact & Bookings</Text>
+          <Text style={styles.sectionHint}>Optional — shown on the listing so renters can reach you directly.</Text>
+          <View style={styles.contactRow}>
+            <Mail size={18} color={Colors.textSecondary} />
+            <TextInput style={styles.contactInput} value={contactEmail} onChangeText={setContactEmail} placeholder="Contact email" placeholderTextColor={Colors.textLight} autoCapitalize="none" keyboardType="email-address" testID="contact-email" />
+          </View>
+          <View style={styles.contactRow}>
+            <MessageCircle size={18} color={Colors.textSecondary} />
+            <TextInput style={styles.contactInput} value={contactWhatsApp} onChangeText={setContactWhatsApp} placeholder="WhatsApp number (e.g. +233 555 000 0000)" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" testID="contact-whatsapp" />
+          </View>
+
+          <Text style={styles.inputLabel}>How should renters book?</Text>
+          <View style={styles.pillRow}>
+            <Pressable style={[styles.pill, bookingChannel === 'in_app' && styles.pillActive]} onPress={() => setBookingChannel('in_app')} testID="channel-in-app">
+              <Text style={[styles.pillText, bookingChannel === 'in_app' && styles.pillTextActive]}>In-app bookings</Text>
+            </Pressable>
+            <Pressable style={[styles.pill, bookingChannel === 'whatsapp' && styles.pillActive]} onPress={() => setBookingChannel('whatsapp')} testID="channel-whatsapp">
+              <Text style={[styles.pillText, bookingChannel === 'whatsapp' && styles.pillTextActive]}>Via WhatsApp</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.disclaimerCard}>
+            <ShieldCheck size={18} color={Colors.primary} />
+            <View style={styles.disclaimerTextWrap}>
+              <Text style={styles.disclaimerTitle}>Owner Disclaimer</Text>
+              <Text style={styles.disclaimerText}>
+                Perfect Space is a listings marketplace, not an agent or payment processor. You are solely responsible for the accuracy of your listing, screening renters, and signing your own tenancy agreements. Never ask for or accept payments outside agreed channels, and treat every inquiry with due diligence.
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -409,7 +504,7 @@ const styles = StyleSheet.create({
   warningNote: { backgroundColor: Colors.warning + '15', padding: 12, borderRadius: 12, marginTop: 10 },
   warningText: { fontSize: 13, color: Colors.warning, fontWeight: '600' as const },
   pillRow: { flexDirection: 'row', gap: 10 },
-  pill: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.white, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.border },
+  pill: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.white, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.border },
   pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   pillText: { fontSize: 15, fontWeight: '600' as const, color: Colors.textSecondary },
   pillTextActive: { color: Colors.white },
@@ -434,6 +529,13 @@ const styles = StyleSheet.create({
   currencyOptionText: { fontSize: 14, color: Colors.text },
   currencyOptionTextActive: { color: Colors.primary, fontWeight: '600' as const },
   bottomSpacer: { height: 40 },
+  durationBlock: { marginTop: 4 },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, marginBottom: 10 },
+  contactInput: { flex: 1, paddingVertical: Platform.OS === 'ios' ? 14 : 12, fontSize: 15, color: Colors.text },
+  disclaimerCard: { flexDirection: 'row', gap: 12, backgroundColor: Colors.primaryLight + '55', borderWidth: 1, borderColor: Colors.primary + '35', borderRadius: 16, padding: 16 },
+  disclaimerTextWrap: { flex: 1 },
+  disclaimerTitle: { fontSize: 14, fontWeight: '700' as const, color: Colors.text, marginBottom: 4 },
+  disclaimerText: { fontSize: 13, lineHeight: 19, color: Colors.textSecondary },
   bottomBar: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingHorizontal: 20, paddingTop: 12 },
   submitBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
   submitBtnDisabled: { opacity: 0.7 },

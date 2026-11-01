@@ -16,6 +16,8 @@ export { PerfectSpaceStore };
 type Env = { DO: Fetcher };
 
 // Direct-to-worker health route (also served via the DO at /api/health).
+// v2: auth gains dob/country/region fields, password change and document verification;
+// conversations gain support chats. v3: collision-proof id generation + country backfill migration in the store.
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);

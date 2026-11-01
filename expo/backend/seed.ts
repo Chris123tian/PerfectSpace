@@ -34,6 +34,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["WiFi", "Air Conditioning", "Laundry", "Elevator", "Gym", "Doorman"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -66,6 +67,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Parking", "Pool", "Concierge", "Gym", "Smart Home", "Balcony"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -99,6 +101,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Fiber Internet", "Meeting Rooms", "Furnished", "24/7 Access", "Coffee Bar"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -132,6 +135,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["WiFi", "Lockers", "Shared Kitchen", "Luggage Storage", "Linens Included"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -165,6 +169,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["WiFi", "Utilities Included", "Furnished", "Heating", "Near Transit"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -198,6 +203,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Pool", "Breakfast", "Ocean View", "Housekeeping", "Spa", "Bar"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -231,6 +237,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Garage", "Backyard", "Basement", "Air Conditioning", "Dishwasher"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -264,6 +271,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Fiber Internet", "Furnished", "Street Exposure", "Kitchenette"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -297,6 +305,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["WiFi", "Dishwasher", "Parking", "Balcony", "Pet Friendly"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -330,6 +339,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Furnished", "WiFi", "Utilities Included", "Study Desk"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -363,6 +373,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["WiFi", "Lockers", "Rooftop Lounge", "Shared Kitchen", "24/7 Check-in"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
@@ -396,6 +407,7 @@ export const seedProperties: Property[] = [
     ],
     amenities: ["Breakfast", "Gym", "Room Service", "City View", "Concierge"],
     ownerId: "admin1",
+    country: "United States",
     ownerName: "Admin Panel",
     ownerAvatar:
       "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",

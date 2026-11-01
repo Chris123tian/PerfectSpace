@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
+import { ImageBackground } from 'react-native';
 import {
   View,
   Text,
@@ -70,7 +72,7 @@ export default function LoginScreen() {
     } catch (e: unknown) {
       console.log('[Login] Google auth error:', e);
       const msg = e instanceof Error ? e.message : 'Failed to sign in with Google';
-      Alert.alert('Google Sign-In Failed', msg);
+      showAlert('Google Sign-In Failed', msg);
     } finally {
       setGoogleLoading(false);
     }
@@ -83,15 +85,11 @@ export default function LoginScreen() {
     } else if (response?.type === 'error') {
       console.log('[Login] Google OAuth error:', response.error);
       setGoogleLoading(false);
-      Alert.alert('Google Sign-In Error', 'Authentication failed. Please try again.');
+      showAlert('Google Sign-In Error', 'Authentication failed. Please try again.');
     } else if (response?.type === 'dismiss') {
       setGoogleLoading(false);
     }
   }, [response, handleGoogleResponse]);
-
-  if (isAuthenticated) {
-    return <Redirect href="/" />;
-  }
 
   const shake = () => {
     Animated.sequence([
@@ -131,7 +129,7 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     if (!googleClientId) {
-      Alert.alert(
+      showAlert(
         'Google Sign-In',
         'Google Sign-In requires a Google OAuth Client ID. Please configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your environment variables.\n\nYou can get one from the Google Cloud Console.',
         [
@@ -149,7 +147,7 @@ export default function LoginScreen() {
     } catch (e) {
       console.log('[Login] Google prompt error:', e);
       setGoogleLoading(false);
-      Alert.alert('Error', 'Failed to open Google Sign-In. Please try again.');
+      showAlert('Error', 'Failed to open Google Sign-In. Please try again.');
     }
   };
 
@@ -158,6 +156,13 @@ export default function LoginScreen() {
     if (router.canDismiss()) router.dismiss();
     else router.replace('/');
   }, []);
+
+  // NOTE: this early return must stay AFTER every hook above — returning
+  // earlier skips the remaining hook calls and crashes React (#300, the
+  // "white page" seen right after signing in).
+  if (isAuthenticated) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <View style={styles.container}>
@@ -172,6 +177,13 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.heroSection}>
+              <ImageBackground
+                source={{ uri: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80' }}
+                style={StyleSheet.absoluteFill}
+                imageStyle={{ resizeMode: 'cover' }}
+              >
+                <View style={styles.heroOverlay} />
+              </ImageBackground>
               <Pressable style={styles.heroBackButton} onPress={handleGoBack} testID="login-back" accessibilityLabel="Back to home">
                 <ArrowLeft size={20} color={Colors.white} />
               </Pressable>
@@ -278,12 +290,6 @@ export default function LoginScreen() {
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </Pressable>
               </View>
-
-              <View style={styles.adminHint}>
-                <Text style={styles.adminHintText}>
-                  Admin login: admin@perfectspace.com / admin123
-                </Text>
-              </View>
             </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -310,6 +316,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 40,
     paddingBottom: 32,
+    overflow: 'hidden' as const,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(16,42,67,0.72)',
   },
   heroBackButton: {
     position: 'absolute' as const,
@@ -515,19 +526,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.primary,
-  },
-  adminHint: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  adminHintText: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '500' as const,
-    textAlign: 'center',
   },
 });

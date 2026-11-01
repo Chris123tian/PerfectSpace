@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { showAlert } from '@/lib/alert';
 import {
   View,
   Text,
@@ -69,7 +70,7 @@ export default function ForgotPasswordScreen() {
       setStep('reset');
     } catch (err) {
       console.log('[ForgotPassword] Error:', err);
-      Alert.alert('Error', 'Unable to verify email. Please try again.');
+      showAlert('Error', 'Unable to verify email. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -95,14 +96,14 @@ export default function ForgotPasswordScreen() {
         updates: { password: newPassword },
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
+      showAlert(
         'Password Reset',
         'Your password has been updated successfully. Please log in with your new password.',
         [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
       );
     } catch (err) {
       console.log('[ForgotPassword] Reset error:', err);
-      Alert.alert('Error', 'Failed to reset password. Please try again.');
+      showAlert('Error', 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
