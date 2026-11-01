@@ -1,4 +1,4 @@
-import { Property } from "@/types/property";
+import { Property } from "../types/property";
 
 // ── Seed Property Images (Unsplash) ──────────────────────────────────────────
 // These demo listings belong to the admin account so the platform looks alive

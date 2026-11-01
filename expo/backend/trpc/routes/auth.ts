@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "@/backend/store";
-import { UserRole } from "@/types/property";
+import { store } from "../../store";
+import { UserRole } from "../../../types/property";
 
 // Never send password hashes/secrets back to the client.
 function sanitizeUser<T extends { password?: string }>(user: T): Omit<T, "password"> {

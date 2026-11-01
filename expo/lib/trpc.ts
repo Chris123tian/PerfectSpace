@@ -8,14 +8,18 @@ export const trpc = createTRPCReact<AppRouter>();
 
 /**
  * Resolves the backend base URL at request time.
- * - Always prefers the Rork-injected EXPO_PUBLIC_RORK_API_BASE_URL.
- * - Only when that env var points at localhost while the page itself is served
- *   from a deployed host (e.g. Vercel, where backend and frontend share one
- *   origin) do we fall back to window.location.origin.
- * - On native there is no window, so the env URL (or local dev port) is used.
+ * - Prefers the persistent Cloudflare backend (EXPO_PUBLIC_RORK_FUNCTIONS_URL)
+ *   so the API works everywhere — preview, production and native — and
+ *   survives sandbox restarts. The sandbox dev URL (EXPO_PUBLIC_RORK_API_BASE_URL)
+ *   is only a fallback for environments without a functions host.
+ * - On deployed web hosts without either env URL, falls back to same-origin.
  */
 export const getBaseUrl = (): string => {
+  const functionsUrl = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL;
   const envUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+
+  // Persistent edge backend — reachable from any surface.
+  if (functionsUrl && functionsUrl.startsWith("https://")) return functionsUrl;
 
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;

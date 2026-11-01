@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   Property,
   User,
@@ -9,7 +8,7 @@ import {
   Booking,
   AppNotification,
   Review,
-} from "@/types/property";
+} from "../types/property";
 import { seedProperties } from "./seed";
 
 const seedUsers: User[] = [
@@ -48,11 +47,24 @@ interface UserSettings {
 // so user data survives server restarts and deploys. Seeds are only used when
 // no snapshot exists yet.
 
-const DATA_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "data"
-);
+const DATA_DIR = path.join(dataRoot(), "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
+
+/**
+ * Resolve a writable root for the snapshot. Uses this module's location on
+ * Node/Bun (local dev + Vercel). Edge runtimes (Cloudflare Workers) have no
+ * filesystem and may expose a non-file import.meta.url — persistence then
+ * silently disables and the store runs fully in-memory from seeds.
+ */
+function dataRoot(): string {
+  try {
+    const here = new URL(".", import.meta.url).pathname;
+    if (here && here.startsWith("/") && fs.existsSync(here)) return here;
+  } catch {
+    // fall through
+  }
+  return "/tmp";
+}
 
 type PersistedData = {
   users: User[];
@@ -268,12 +280,15 @@ class Store {
 export const store = new Store();
 
 // Make sure the latest state is written before the process exits.
-process.on("exit", () => store.flush());
-process.on("SIGINT", () => {
-  store.flush();
-  process.exit(0);
-});
-process.on("SIGTERM", () => {
-  store.flush();
-  process.exit(0);
-});
+// (Edge runtimes have no long-lived process or signals — guard everything.)
+if (typeof process !== "undefined" && typeof process.on === "function") {
+  process.on("exit", () => store.flush());
+  process.on("SIGINT", () => {
+    store.flush();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    store.flush();
+    process.exit(0);
+  });
+}

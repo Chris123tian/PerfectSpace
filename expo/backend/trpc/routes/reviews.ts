@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "@/backend/store";
-import { Review } from "@/types/property";
+import { store } from "../../store";
+import { Review } from "../../../types/property";
 
 export const reviewsRouter = createTRPCRouter({
   list: publicProcedure.query(() => {
