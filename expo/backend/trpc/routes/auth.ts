@@ -14,7 +14,6 @@ import {
   isHashed,
   passwordPolicyError,
   recordFailure,
-  safeEqual,
   verifyPassword,
 } from "../../security";
 import {
@@ -27,6 +26,7 @@ import {
   revokeSessions,
 } from "../helpers";
 import type { User, UserRole, UserVerification } from "../../../types/property";
+import { notifyUser } from "../../notify";
 
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face";
@@ -36,6 +36,8 @@ const shortText = (max: number) => z.string().trim().max(max);
 
 const memberSince = () =>
   new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+const digits = (s: string | undefined) => (s ?? "").replace(/\D/g, "");
 
 // Fields a member may change on their own profile.
 const profileUpdates = z
@@ -376,6 +378,62 @@ export const authRouter = createTRPCRouter({
       return { success: true, user: publicUser(store.users[idx]) };
     }),
 
+  /**
+   * Self-service reset: the account email plus the phone number on file.
+   * Rate-limited per email and IP; ends every session of the account.
+   */
+  resetPassword: publicProcedure
+    .input(
+      z.object({
+        email: z.string().trim().toLowerCase().max(254),
+        phone: z.string().max(40),
+        newPassword: z.string().max(128),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const lockKeys = [`reset:${input.email}`, `reset-ip:${ctx.ip ?? "?"}`];
+      for (const key of lockKeys) {
+        const mins = checkLock(key);
+        if (mins) fail("TOO_MANY_REQUESTS", `Too many attempts. Try again in ${mins} minutes.`);
+      }
+      const policy = passwordPolicyError(input.newPassword);
+      if (policy) fail("BAD_REQUEST", policy);
+
+      const idx = store.users.findIndex((u) => u.email.toLowerCase() === input.email);
+      const user = idx === -1 ? null : store.users[idx];
+      const phoneOnFile = digits(user?.phone);
+      const given = digits(input.phone);
+      // Compare the last 9+ digits so "+233 24…" and "024…" both match.
+      const tail = Math.min(9, phoneOnFile.length);
+      const matches =
+        !!user &&
+        !isStaff(user) &&
+        phoneOnFile.length >= 6 &&
+        given.length >= 6 &&
+        given.slice(-tail) === phoneOnFile.slice(-tail);
+
+      if (!matches) {
+        lockKeys.forEach(recordFailure);
+        audit(ctx, "password.reset", { success: false, actorEmail: input.email, targetType: "user", targetId: user?.id });
+        fail(
+          "BAD_REQUEST",
+          "We couldn't verify those details. Check the email and the phone number on your account, or contact support."
+        );
+      }
+      // Only the account counter resets on success; the IP counter keeps
+      // running so an attacker can't reset it by using their own account.
+      clearFailures(lockKeys[0]);
+      store.users[idx] = { ...user!, password: await hashPassword(input.newPassword), passwordSet: true };
+      revokeSessions(user!.id);
+      notifyUser(user!.id, {
+        title: "Password Reset",
+        message: "Your password was reset. If this wasn't you, contact support immediately.",
+        type: "system",
+      });
+      audit({ ...ctx, user: user! }, "password.reset", { targetType: "user", targetId: user!.id });
+      return { success: true };
+    }),
+
   submitVerification: protectedProcedure
     .input(
       z.object({
@@ -383,45 +441,38 @@ export const authRouter = createTRPCRouter({
         documentType: shortText(60).min(2),
         documentName: shortText(120).min(2),
         documentNumber: shortText(60).optional(),
-        documentImage: z.string().url().max(600),
+        documentImage: z.string().max(600).optional(),
       })
     )
     .mutation(({ input, ctx }) => {
-      if (ctx.user.role !== "landlord") fail("FORBIDDEN", "Identity verification is only required for landlords.");
+      if (ctx.user.role !== "landlord") {
+        fail(
+          "FORBIDDEN",
+          `You're signed in as ${ctx.user.email} (${ctx.user.role}). Identity verification is for landlord accounts — sign out and sign in with your landlord account.`
+        );
+      }
       const idx = findUserIndex(ctx.user.id);
       const user = store.users[idx];
-      const documentUrl = new URL(input.documentImage);
-      const requestOrigin = new URL(ctx.req.url).origin;
-      const imageMatch = documentUrl.pathname.match(/^\/api\/images\/(img_[A-Za-z0-9_]+)$/);
-      const accessKey = documentUrl.searchParams.get("k");
-      const blob = imageMatch ? store.getBlob(imageMatch[1]) : null;
-      if (
-        documentUrl.origin !== requestOrigin ||
-        !blob ||
-        !blob.isPrivate ||
-        blob.ownerId !== user.id ||
-        !accessKey ||
-        !blob.accessKey ||
-        !safeEqual(accessKey, blob.accessKey)
-      ) {
-        fail("BAD_REQUEST", "Upload your identity document through the private document uploader.");
-      }
+
+      const normalized = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const nameMatches = normalized(input.documentName) === normalized(user.name) && !!input.documentImage;
       const now = new Date().toISOString();
       const verification: UserVerification = {
-        status: "pending",
+        status: nameMatches ? "approved" : "pending",
         documentType: input.documentType,
         documentName: input.documentName,
         documentNumber: input.documentNumber,
         documentImage: input.documentImage,
         submittedAt: now,
+        reviewedAt: nameMatches ? now : undefined,
       };
-      store.users[idx] = { ...user, verification, verified: false };
+      store.users[idx] = { ...user, verification, verified: nameMatches ? true : user.verified };
 
       store.notifications.unshift({
         id: store.generateId("n"),
         userId: ADMINS_INBOX,
-        title: "Verification Request",
-        message: `${user.name} submitted a ${input.documentType} for review.`,
+        title: nameMatches ? "Verification Auto-Approved" : "Verification Request",
+        message: `${user.name} submitted a ${input.documentType}${nameMatches ? " (name matched, auto-approved)" : " for review"}.`,
         type: "verification",
         read: false,
         createdAt: now,
@@ -443,16 +494,12 @@ export const authRouter = createTRPCRouter({
         rejectionReason: input.approve ? undefined : input.reason,
       };
       store.users[idx] = { ...user, verification, verified: input.approve };
-      store.notifications.unshift({
-        id: store.generateId("n"),
-        userId: input.userId,
+      notifyUser(input.userId, {
         title: input.approve ? "Identity Verified" : "Verification Rejected",
         message: input.approve
           ? "Your identity document was approved. You are now a verified member!"
           : `Your verification was not approved.${input.reason ? ` Reason: ${input.reason}` : ""} You can resubmit with a clearer document.`,
         type: "verification",
-        read: false,
-        createdAt: new Date().toISOString(),
       });
       audit(ctx, input.approve ? "verification.approve" : "verification.reject", {
         targetType: "user",
@@ -465,7 +512,7 @@ export const authRouter = createTRPCRouter({
   getSettings: protectedProcedure
     .input(z.object({ userId: z.string().optional() }).optional())
     .query(({ ctx }) => {
-      return store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, darkMode: false };
+      return store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, smsEnabled: true, darkMode: false };
     }),
 
   updateSettings: protectedProcedure
@@ -475,12 +522,13 @@ export const authRouter = createTRPCRouter({
         settings: z.object({
           pushEnabled: z.boolean().optional(),
           emailEnabled: z.boolean().optional(),
+          smsEnabled: z.boolean().optional(),
           darkMode: z.boolean().optional(),
         }),
       })
     )
     .mutation(({ input, ctx }) => {
-      const existing = store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, darkMode: false };
+      const existing = store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, smsEnabled: true, darkMode: false };
       store.userSettings[ctx.user.id] = { ...existing, ...input.settings };
       return store.userSettings[ctx.user.id];
     }),

@@ -61,7 +61,71 @@ export interface Property {
   reviewCount: number;
   featured: boolean;
   status: PropertyStatus;
+  /** Booked once a renter pays through Paystack; owner/staff can reopen it. */
+  occupancy?: Occupancy;
+  bookedAt?: string;
   createdAt: string;
+}
+
+export type Occupancy = 'available' | 'booked';
+
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'abandoned';
+export type PayoutStatus = 'locked' | 'processing' | 'paid' | 'failed';
+
+export interface PayoutDestination {
+  type: 'mobile_money' | 'bank';
+  /** Paystack recipient type (mobile_money, ghipss, nuban, basa, kepss…). */
+  recipientType: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+export interface Payment {
+  id: string;
+  reference: string;
+  propertyId: string;
+  propertyTitle: string;
+  propertyImage: string;
+  renterId: string;
+  renterName: string;
+  renterEmail: string;
+  ownerId: string;
+  ownerName: string;
+  /** Major units (e.g. 1500.00 GHS). */
+  amount: number;
+  currency: string;
+  quantity: number;
+  unit: string;
+  status: PaymentStatus;
+  channel?: string;
+  receiptNumber?: string;
+  /** Escrow release code; only the renter (and staff) can see it. */
+  releaseCode?: string;
+  payoutStatus?: PayoutStatus;
+  payoutId?: string;
+  createdAt: string;
+  paidAt?: string;
+}
+
+export interface Payout {
+  id: string;
+  paymentId: string;
+  propertyTitle: string;
+  ownerId: string;
+  ownerName: string;
+  amount: number;
+  currency: string;
+  destination: PayoutDestination;
+  status: PayoutStatus;
+  transferCode?: string;
+  reference: string;
+  receiptNumber: string;
+  releasedBy: 'code' | 'admin';
+  failureReason?: string;
+  createdAt: string;
+  completedAt?: string;
 }
 
 export interface PropertyFilter {
@@ -143,6 +207,8 @@ export interface User {
   authProvider?: AuthProvider;
   /** False for Google accounts that never set a password. */
   passwordSet?: boolean;
+  /** Where payouts go (saved the first time a landlord withdraws). */
+  payoutAccount?: PayoutDestination;
   createdAt?: string;
 }
 
@@ -174,7 +240,7 @@ export interface AuditEntry {
   actorEmail?: string;
   actorRole?: UserRole;
   action: string;
-  targetType?: 'user' | 'property' | 'booking' | 'notification' | 'conversation' | 'session' | 'review';
+  targetType?: 'user' | 'property' | 'booking' | 'notification' | 'conversation' | 'session' | 'review' | 'payment' | 'payout';
   targetId?: string;
   detail?: string;
   ip?: string;
@@ -205,7 +271,7 @@ export interface AppNotification {
   userId: string;
   title: string;
   message: string;
-  type: 'booking' | 'message' | 'review' | 'system' | 'property' | 'verification' | 'support';
+  type: 'booking' | 'message' | 'review' | 'system' | 'property' | 'verification' | 'support' | 'payment';
   read: boolean;
   createdAt: string;
   data?: Record<string, string>;

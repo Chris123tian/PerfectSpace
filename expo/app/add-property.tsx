@@ -12,9 +12,10 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { PropertyType, ListingType, Property, RentalDurationUnit, BookingChannel } from '@/types/property';
-import { findCountry } from '@/lib/countries';
+import { countryOptions, defaultCountry, CountryOption } from '@/lib/countries';
+import SelectField from '@/components/SelectField';
 import { uploadImage, isHostedImage } from '@/lib/upload';
-import { regionOptions } from '@/lib/regions';
+import { regionOptions, townOptions } from '@/lib/regions';
 
 /** A photo in the form: shown from `preview`, saved as `url` once uploaded. */
 export interface PhotoSlot {
@@ -25,33 +26,6 @@ export interface PhotoSlot {
   height?: number;
   status: 'uploading' | 'done' | 'error';
 }
-
-interface CurrencyOption {
-  country: string;
-  code: string;
-  symbol: string;
-}
-
-const currencyOptions: CurrencyOption[] = [
-  { country: 'United States', code: 'USD', symbol: '$' },
-  { country: 'United Kingdom', code: 'GBP', symbol: '£' },
-  { country: 'European Union', code: 'EUR', symbol: '€' },
-  { country: 'Canada', code: 'CAD', symbol: 'CA$' },
-  { country: 'Australia', code: 'AUD', symbol: 'A$' },
-  { country: 'Nigeria', code: 'NGN', symbol: '₦' },
-  { country: 'South Africa', code: 'ZAR', symbol: 'R' },
-  { country: 'Kenya', code: 'KES', symbol: 'KSh' },
-  { country: 'Ghana', code: 'GHS', symbol: 'GH₵' },
-  { country: 'India', code: 'INR', symbol: '₹' },
-  { country: 'Japan', code: 'JPY', symbol: '¥' },
-  { country: 'China', code: 'CNY', symbol: '¥' },
-  { country: 'Brazil', code: 'BRL', symbol: 'R$' },
-  { country: 'Mexico', code: 'MXN', symbol: 'MX$' },
-  { country: 'UAE', code: 'AED', symbol: 'د.إ' },
-  { country: 'Saudi Arabia', code: 'SAR', symbol: '﷼' },
-  { country: 'Egypt', code: 'EGP', symbol: 'E£' },
-  { country: 'Tanzania', code: 'TZS', symbol: 'TSh' },
-];
 
 const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }[] = [
   { key: 'apartment', label: 'Apartment', icon: <Building2 size={20} color={Colors.categoryApartment} /> },
@@ -89,8 +63,7 @@ export default function AddPropertyScreen() {
   const [neighborhood, setNeighborhood] = useState<string>('');
   const { properties } = useData();
   const [amenities, setAmenities] = useState<string>('');
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption>(currencyOptions[0]);
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<CountryOption>(defaultCountry);
   const [photos, setPhotos] = useState<PhotoSlot[]>([]);
   const [durationUnit, setDurationUnit] = useState<RentalDurationUnit>('month');
   const [minNights, setMinNights] = useState<string>('');
@@ -98,10 +71,18 @@ export default function AddPropertyScreen() {
   const [contactWhatsApp, setContactWhatsApp] = useState<string>('');
   const [bookingChannel, setBookingChannel] = useState<BookingChannel>('in_app');
 
-  const regionChoices = useMemo(() => {
-    const country = findCountry(selectedCurrency.country)?.name;
-    return regionOptions(country, properties).slice(0, 40);
-  }, [selectedCurrency.country, properties]);
+  const regionChoices = useMemo(
+    () => regionOptions(selectedCurrency.name, properties),
+    [selectedCurrency.name, properties],
+  );
+  const townChoices = useMemo(
+    () => townOptions(selectedCurrency.name, region || null, properties),
+    [selectedCurrency.name, region, properties],
+  );
+  const countryChoices = useMemo(
+    () => countryOptions.map(c => ({ value: c.name, leading: c.flag, hint: `${c.currency} · ${c.symbol}` })),
+    [],
+  );
 
   const uploadSlot = useCallback(async (slot: PhotoSlot) => {
     try {
@@ -246,7 +227,7 @@ export default function AddPropertyScreen() {
         period,
         durationUnit: unit,
         minNights: isHotel ? (parseInt(minNights) || undefined) : undefined,
-        country: findCountry(selectedCurrency.country)?.name,
+        country: selectedCurrency.name,
         contactEmail: contactEmail.trim() || undefined,
         contactWhatsApp: contactWhatsApp.trim() || undefined,
         bookingChannel,
@@ -376,44 +357,24 @@ export default function AddPropertyScreen() {
           <Text style={styles.inputLabel}>Description *</Text>
           <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} placeholder="Describe your property..." placeholderTextColor={Colors.textLight} multiline numberOfLines={4} textAlignVertical="top" testID="property-description" />
 
-          <Text style={styles.inputLabel}>Currency & Price *</Text>
-          <Pressable
-            style={styles.currencySelector}
-            onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
+          <Text style={styles.inputLabel}>Country & Price *</Text>
+          <SelectField
+            value={selectedCurrency.name}
+            options={countryChoices}
+            title="Country"
+            onChange={(v) => {
+              const next = countryOptions.find(c => c.name === v);
+              if (!next) return;
+              setSelectedCurrency(next);
+              setRegion('');
+              setCity('');
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            displayValue={`${selectedCurrency.flag}  ${selectedCurrency.name} · ${selectedCurrency.symbol} (${selectedCurrency.currency})`}
             testID="currency-selector"
-          >
-            <Text style={styles.currencyFlag}>{selectedCurrency.symbol}</Text>
-            <Text style={styles.currencyLabel}>{selectedCurrency.country} ({selectedCurrency.code})</Text>
-            <Text style={styles.currencyArrow}>{showCurrencyPicker ? '\u25B2' : '\u25BC'}</Text>
-          </Pressable>
-          {showCurrencyPicker && (
-            <View style={styles.currencyDropdown}>
-              <ScrollView nestedScrollEnabled style={styles.currencyScrollList} showsVerticalScrollIndicator={true}>
-                {currencyOptions.map((opt: CurrencyOption) => (
-                  <Pressable
-                    key={opt.code}
-                    style={[
-                      styles.currencyOption,
-                      selectedCurrency.code === opt.code && styles.currencyOptionActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedCurrency(opt);
-                      setShowCurrencyPicker(false);
-                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                  >
-                    <Text style={[
-                      styles.currencyOptionText,
-                      selectedCurrency.code === opt.code && styles.currencyOptionTextActive,
-                    ]}>
-                      {opt.symbol}  {opt.country} ({opt.code})
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? (type === 'hotel' ? `Price per night in ${selectedCurrency.code}` : durationUnit === 'year' ? `Yearly rent in ${selectedCurrency.code}` : `Monthly rent in ${selectedCurrency.code}`) : `Sale price in ${selectedCurrency.code}`} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
+          />
+          <View style={{ height: 10 }} />
+          <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder={listingType === 'rent' ? (type === 'hotel' ? `Price per night in ${selectedCurrency.currency}` : durationUnit === 'year' ? `Yearly rent in ${selectedCurrency.currency}` : `Monthly rent in ${selectedCurrency.currency}`) : `Sale price in ${selectedCurrency.currency}`} placeholderTextColor={Colors.textLight} keyboardType="numeric" testID="property-price" />
 
           {listingType === 'rent' && type !== 'hotel' && (
             <View style={styles.durationBlock}>
@@ -468,24 +429,40 @@ export default function AddPropertyScreen() {
           <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="Street address" placeholderTextColor={Colors.textLight} testID="property-address" />
 
           <Text style={styles.inputLabel}>Region / State</Text>
-          <TextInput style={styles.input} value={region} onChangeText={setRegion} placeholder="e.g. Greater Accra" placeholderTextColor={Colors.textLight} testID="property-region" />
-          {regionChoices.length > 0 && (
+          <SelectField
+            value={region}
+            options={regionChoices}
+            title={`Regions in ${selectedCurrency.name}`}
+            placeholder="Select a region"
+            allowCustom
+            onChange={(v) => { setRegion(v ?? ''); setCity(''); }}
+            testID="property-region"
+          />
+          {regionChoices.length > 0 && !region && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.regionChips} keyboardShouldPersistTaps="handled">
-              {regionChoices.map(r => (
+              {regionChoices.slice(0, 8).map(r => (
                 <Pressable
                   key={r}
-                  style={[styles.regionChip, region === r && styles.regionChipActive]}
+                  style={styles.regionChip}
                   onPress={() => setRegion(r)}
                   testID={`property-region-${r.replace(/\s+/g, '-')}`}
                 >
-                  <Text style={[styles.regionChipText, region === r && styles.regionChipTextActive]}>{r}</Text>
+                  <Text style={styles.regionChipText}>{r}</Text>
                 </Pressable>
               ))}
             </ScrollView>
           )}
 
           <Text style={styles.inputLabel}>Town / City *</Text>
-          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="e.g. Accra, Kumasi, Tema" placeholderTextColor={Colors.textLight} testID="property-city" />
+          <SelectField
+            value={city}
+            options={townChoices}
+            title={region ? `Towns in ${region}` : `Towns in ${selectedCurrency.name}`}
+            placeholder="Select a town"
+            allowCustom
+            onChange={(v) => setCity(v ?? '')}
+            testID="property-city"
+          />
 
           <Text style={styles.inputLabel}>Neighbourhood / Area</Text>
           <TextInput style={styles.input} value={neighborhood} onChangeText={setNeighborhood} placeholder="e.g. East Legon" placeholderTextColor={Colors.textLight} testID="property-neighborhood" />

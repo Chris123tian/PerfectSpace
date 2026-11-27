@@ -34,6 +34,9 @@ function RootLayoutNav() {
       <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="portal" options={{ headerShown: false, animation: "fade" }} />
+      <Stack.Screen name="payments" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="payment/callback" options={{ headerShown: false, animation: "fade" }} />
+      <Stack.Screen name="receipt/[id]" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
   );
 }

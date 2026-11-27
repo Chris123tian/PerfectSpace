@@ -9,7 +9,11 @@ import {
   ArrowLeft, Users, Building2, Calendar, Shield, ShieldOff,
   Trash2, Star, Eye, ChevronRight, TrendingUp, UserCheck, UserX, BadgeCheck,
   MessageCircle, Bell, X, Activity, ScrollText, LogOut, Search, Crown,
+  LayoutDashboard, Wallet, Megaphone, ClipboardCheck, KeyRound, DoorOpen, DoorClosed,
 } from 'lucide-react-native';
+import SupportInbox from '@/components/admin/SupportInbox';
+import MoneyPanel from '@/components/admin/MoneyPanel';
+import BroadcastPanel from '@/components/admin/BroadcastPanel';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,19 +24,58 @@ import { User, Property, AppNotification } from '@/types/property';
 
 type AdminTab =
   | 'overview' | 'pending' | 'verifications' | 'support' | 'users' | 'properties' | 'notifications'
-  | 'activity' | 'audit';
+  | 'payments' | 'broadcast' | 'activity' | 'audit';
 
 const TAB_LABELS: Record<AdminTab, string> = {
   overview: 'Overview',
-  pending: 'Pending',
+  pending: 'Approvals',
   verifications: 'Verification',
   support: 'Support',
   users: 'Users',
-  properties: 'Properties',
+  properties: 'All listings',
   notifications: 'Notifications',
+  payments: 'Payments',
+  broadcast: 'Broadcast',
   activity: 'Activity',
   audit: 'Audit',
 };
+
+interface NavGroup { id: string; label: string; tabs: AdminTab[]; superOnly?: boolean }
+
+const NAV_GROUPS: NavGroup[] = [
+  { id: 'home', label: 'Dashboard', tabs: ['overview'] },
+  { id: 'listings', label: 'Listings', tabs: ['pending', 'properties'] },
+  { id: 'people', label: 'People', tabs: ['users', 'verifications'] },
+  { id: 'money', label: 'Money', tabs: ['payments'] },
+  { id: 'inbox', label: 'Inbox', tabs: ['support', 'notifications', 'broadcast'] },
+  { id: 'security', label: 'Security', tabs: ['activity', 'audit'], superOnly: true },
+];
+
+function TabIcon({ tab, color }: { tab: AdminTab; color: string }) {
+  const size = 15;
+  switch (tab) {
+    case 'overview': return <LayoutDashboard size={size} color={color} />;
+    case 'pending': return <ClipboardCheck size={size} color={color} />;
+    case 'properties': return <Building2 size={size} color={color} />;
+    case 'users': return <Users size={size} color={color} />;
+    case 'verifications': return <BadgeCheck size={size} color={color} />;
+    case 'payments': return <Wallet size={size} color={color} />;
+    case 'support': return <MessageCircle size={size} color={color} />;
+    case 'notifications': return <Bell size={size} color={color} />;
+    case 'broadcast': return <Megaphone size={size} color={color} />;
+    case 'activity': return <Activity size={size} color={color} />;
+    case 'audit': return <ScrollText size={size} color={color} />;
+  }
+}
+
+type ListingFilter = 'all' | 'active' | 'pending' | 'booked' | 'rejected';
+const LISTING_FILTERS: { id: ListingFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Live' },
+  { id: 'booked', label: 'Booked' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'rejected', label: 'Rejected' },
+];
 
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—';
@@ -75,6 +118,12 @@ export default function AdminScreen() {
   const [auditFailuresOnly, setAuditFailuresOnly] = useState<boolean>(false);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [listingSearch, setListingSearch] = useState<string>('');
+  const [listingFilter, setListingFilter] = useState<ListingFilter>('all');
+  const [userSearch, setUserSearch] = useState<string>('');
+  const [userRole, setUserRole] = useState<'all' | User['role']>('all');
+  const occupancyMutation = trpc.properties.setOccupancy.useMutation();
+  const paymentsQuery = trpc.payments.adminList.useQuery(undefined, { enabled: isStaff && activeTab === 'overview' });
 
   const activityQuery = trpc.superadmin.users.useQuery(undefined, {
     enabled: isSuperAdmin && activeTab === 'activity',
@@ -92,13 +141,7 @@ export default function AdminScreen() {
     onSuccess: () => { void sessionsQuery.refetch(); void activityQuery.refetch(); },
   });
 
-  const tabs = useMemo<AdminTab[]>(
-    () => [
-      'overview', 'pending', 'verifications', 'support', 'users', 'properties', 'notifications',
-      ...(isSuperAdmin ? (['activity', 'audit'] as AdminTab[]) : []),
-    ],
-    [isSuperAdmin]
-  );
+  const navGroups = useMemo(() => NAV_GROUPS.filter(g => !g.superOnly || isSuperAdmin), [isSuperAdmin]);
 
   const supportUnread = useMemo(
     () => supportConversations.filter(c => (user ? (c.unreadCount[user.id] ?? 0) : 0) > 0 || Object.entries(c.unreadCount).some(([id, n]) => id !== c.participantIds[0] && n > 0)).length,
@@ -107,7 +150,8 @@ export default function AdminScreen() {
   const queryClient = useQueryClient();
   const { width: winWidth } = useWindowDimensions();
   const isWide = winWidth >= 768;
-  const contentMax = isWide ? 760 : undefined;
+  const hasSidebar = winWidth >= 960;
+  const contentMax = isWide ? 860 : undefined;
 
   const reviewVerificationMutation = trpc.auth.reviewVerification.useMutation({
     onSuccess: () => {
@@ -176,7 +220,35 @@ export default function AdminScreen() {
     landlords: allUsers.filter(u => u.role === 'landlord').length,
     renters: allUsers.filter(u => u.role === 'renter').length,
     featuredProperties: properties.filter(p => p.featured).length,
+    bookedProperties: properties.filter(p => p.occupancy === 'booked').length,
   }), [allUsers, properties, allBookings, pendingProperties.length]);
+
+  const money = useMemo(() => {
+    const paid = (paymentsQuery.data?.payments ?? []).filter(p => p.status === 'paid');
+    return {
+      paidCount: paid.length,
+      escrowCount: paid.filter(p => !p.payoutStatus || p.payoutStatus === 'locked').length,
+      failedPayouts: paid.filter(p => p.payoutStatus === 'failed').length,
+    };
+  }, [paymentsQuery.data]);
+
+  const filteredListings = useMemo(() => {
+    const q = listingSearch.trim().toLowerCase();
+    return properties
+      .filter(p => {
+        if (listingFilter === 'booked') return p.occupancy === 'booked';
+        if (listingFilter === 'all') return true;
+        return p.status === listingFilter;
+      })
+      .filter(p => !q || [p.title, p.ownerName, p.city, p.region ?? '', p.country ?? ''].some(s => (s ?? '').toLowerCase().includes(q)));
+  }, [properties, listingFilter, listingSearch]);
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    return allUsers
+      .filter(u => userRole === 'all' || u.role === userRole)
+      .filter(u => !q || [u.name, u.email, u.phone ?? ''].some(s => s.toLowerCase().includes(q)));
+  }, [allUsers, userRole, userSearch]);
 
   const handleToggleUserActive = useCallback(async (targetUser: User) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -343,6 +415,31 @@ export default function AdminScreen() {
     }
   }, [updateProperty]);
 
+  const handleToggleOccupancy = useCallback((property: Property) => {
+    const next = property.occupancy === 'booked' ? 'available' : 'booked';
+    showAlert(
+      next === 'booked' ? 'Mark as booked' : 'Reopen listing',
+      next === 'booked'
+        ? `Mark "${property.title}" as booked? Renters can no longer pay for it.`
+        : `Reopen "${property.title}" so renters can book and pay again?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: next === 'booked' ? 'Mark booked' : 'Reopen',
+          onPress: async () => {
+            try {
+              await occupancyMutation.mutateAsync({ id: property.id, occupancy: next });
+              await refetchAll();
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e) {
+              showAlert('Error', e instanceof Error ? e.message : 'Could not update the listing.');
+            }
+          },
+        },
+      ]
+    );
+  }, [occupancyMutation, refetchAll]);
+
   const handleDeleteProperty = useCallback(async (property: Property) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showAlert('Delete Property', `Delete "${property.title}"?`, [
@@ -387,97 +484,96 @@ export default function AdminScreen() {
     );
   }
 
+  const attention: { key: string; label: string; count: number; tab: AdminTab; color: string; icon: React.ReactNode }[] = [
+    { key: 'approvals', label: 'Listings awaiting approval', count: stats.pendingProps, tab: 'pending', color: Colors.warning, icon: <ClipboardCheck size={18} color={Colors.warning} /> },
+    { key: 'verifs', label: 'Landlord verifications to review', count: pendingVerifications.length, tab: 'verifications', color: Colors.primary, icon: <BadgeCheck size={18} color={Colors.primary} /> },
+    { key: 'support', label: 'Support chats with unread messages', count: supportUnread, tab: 'support', color: Colors.categoryOffice, icon: <MessageCircle size={18} color={Colors.categoryOffice} /> },
+    { key: 'payouts', label: 'Failed payouts to retry', count: money.failedPayouts, tab: 'payments', color: Colors.error, icon: <Wallet size={18} color={Colors.error} /> },
+  ];
+  const openItems = attention.filter(a => a.count > 0);
+
   const renderOverview = () => (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}>
-      <Text style={styles.sectionTitle}>Platform Stats</Text>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[styles.tabContent, isWide && { maxWidth: contentMax, alignSelf: 'center', width: '100%' }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.heroKicker}>{isSuperAdmin ? 'SUPER ADMIN' : 'ADMIN'} · {user?.name ?? ''}</Text>
+        <Text style={styles.heroTitle}>{openItems.length === 0 ? 'All caught up' : `${openItems.reduce((s, a) => s + a.count, 0)} things need you`}</Text>
+        <Text style={styles.heroSub}>{stats.activeProperties} live listings · {stats.bookedProperties} booked · {stats.totalUsers} members</Text>
+      </View>
+
+      {openItems.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Needs attention</Text>
+          {openItems.map(a => (
+            <Pressable key={a.key} style={[styles.quickAction, { borderLeftWidth: 3, borderLeftColor: a.color }]} onPress={() => setActiveTab(a.tab)} testID={`attention-${a.key}`}>
+              {a.icon}
+              <Text style={styles.quickActionText}>{a.label}</Text>
+              <View style={[styles.countPill, { backgroundColor: a.color }]}><Text style={styles.countPillText}>{a.count}</Text></View>
+              <ChevronRight size={18} color={Colors.textLight} />
+            </Pressable>
+          ))}
+        </>
+      )}
+
+      <Text style={styles.sectionTitle}>Listings</Text>
       <View style={styles.statsGrid}>
-        <View style={[styles.statCard, { backgroundColor: Colors.primary + '10' }]}>
-          <Users size={24} color={Colors.primary} />
-          <Text style={styles.statNumber}>{stats.totalUsers}</Text>
-          <Text style={styles.statLabel}>Total Users</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: Colors.accent + '10' }]}>
-          <Building2 size={24} color={Colors.accent} />
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.accent + '12' }]} onPress={() => setActiveTab('properties')}>
+          <Building2 size={22} color={Colors.accent} />
           <Text style={styles.statNumber}>{stats.totalProperties}</Text>
           <Text style={styles.statLabel}>Properties</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: Colors.success + '10' }]}>
-          <Calendar size={24} color={Colors.success} />
-          <Text style={styles.statNumber}>{stats.totalBookings}</Text>
-          <Text style={styles.statLabel}>Bookings</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: Colors.categoryOffice + '10' }]}>
-          <TrendingUp size={24} color={Colors.categoryOffice} />
-          <Text style={styles.statNumber}>{stats.pendingBookings}</Text>
-          <Text style={styles.statLabel}>Pending Bookings</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: Colors.warning + '10' }]}>
-          <Shield size={24} color={Colors.warning} />
+        </Pressable>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.success + '12' }]} onPress={() => { setListingFilter('booked'); setActiveTab('properties'); }}>
+          <KeyRound size={22} color={Colors.success} />
+          <Text style={styles.statNumber}>{stats.bookedProperties}</Text>
+          <Text style={styles.statLabel}>Booked</Text>
+        </Pressable>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.warning + '12' }]} onPress={() => setActiveTab('pending')}>
+          <Shield size={22} color={Colors.warning} />
           <Text style={styles.statNumber}>{stats.pendingProps}</Text>
           <Text style={styles.statLabel}>Pending Approval</Text>
-        </View>
+        </Pressable>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.accent + '12' }]} onPress={() => setActiveTab('properties')}>
+          <Star size={22} color={Colors.accent} />
+          <Text style={styles.statNumber}>{stats.featuredProperties}</Text>
+          <Text style={styles.statLabel}>Featured</Text>
+        </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>User Breakdown</Text>
-      <View style={styles.breakdownCard}>
-        <View style={styles.breakdownRow}>
-          <View style={styles.breakdownLeft}>
-            <View style={[styles.breakdownDot, { backgroundColor: Colors.primary }]} />
-            <Text style={styles.breakdownLabel}>Landlords</Text>
-          </View>
-          <Text style={styles.breakdownValue}>{stats.landlords}</Text>
-        </View>
-        <View style={styles.breakdownRow}>
-          <View style={styles.breakdownLeft}>
-            <View style={[styles.breakdownDot, { backgroundColor: Colors.categoryApartment }]} />
-            <Text style={styles.breakdownLabel}>Renters</Text>
-          </View>
-          <Text style={styles.breakdownValue}>{stats.renters}</Text>
-        </View>
-        <View style={styles.breakdownRow}>
-          <View style={styles.breakdownLeft}>
-            <View style={[styles.breakdownDot, { backgroundColor: Colors.accent }]} />
-            <Text style={styles.breakdownLabel}>Featured Properties</Text>
-          </View>
-          <Text style={styles.breakdownValue}>{stats.featuredProperties}</Text>
-        </View>
-        <View style={styles.breakdownRow}>
-          <View style={styles.breakdownLeft}>
-            <View style={[styles.breakdownDot, { backgroundColor: Colors.success }]} />
-            <Text style={styles.breakdownLabel}>Active Properties</Text>
-          </View>
-          <Text style={styles.breakdownValue}>{stats.activeProperties}</Text>
-        </View>
+      <Text style={styles.sectionTitle}>People & bookings</Text>
+      <View style={styles.statsGrid}>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.primary + '10' }]} onPress={() => setActiveTab('users')}>
+          <Users size={22} color={Colors.primary} />
+          <Text style={styles.statNumber}>{stats.totalUsers}</Text>
+          <Text style={styles.statLabel}>{stats.landlords} landlords · {stats.renters} renters</Text>
+        </Pressable>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.categoryOffice + '10' }]} onPress={() => router.push('/bookings')}>
+          <Calendar size={22} color={Colors.categoryOffice} />
+          <Text style={styles.statNumber}>{stats.totalBookings}</Text>
+          <Text style={styles.statLabel}>Viewings · {stats.pendingBookings} pending</Text>
+        </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <Pressable style={styles.quickAction} onPress={() => setActiveTab('users')}>
-        <Users size={20} color={Colors.primary} />
-        <Text style={styles.quickActionText}>Manage Users</Text>
-        <ChevronRight size={18} color={Colors.textLight} />
-      </Pressable>
-      {stats.pendingProps > 0 && (
-        <Pressable style={[styles.quickAction, { borderLeftWidth: 3, borderLeftColor: Colors.warning }]} onPress={() => setActiveTab('pending')}>
-          <Shield size={20} color={Colors.warning} />
-          <Text style={styles.quickActionText}>Review Pending Properties ({stats.pendingProps})</Text>
-          <ChevronRight size={18} color={Colors.textLight} />
+      <Text style={styles.sectionTitle}>Money</Text>
+      <View style={styles.statsGrid}>
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.primary + '10' }]} onPress={() => setActiveTab('payments')} testID="overview-payments">
+          <Wallet size={22} color={Colors.primary} />
+          <Text style={styles.statNumber}>{money.paidCount}</Text>
+          <Text style={styles.statLabel}>Paystack payments</Text>
         </Pressable>
-      )}
-      <Pressable style={styles.quickAction} onPress={() => setActiveTab('properties')}>
-        <Building2 size={20} color={Colors.accent} />
-        <Text style={styles.quickActionText}>Manage Properties</Text>
-        <ChevronRight size={18} color={Colors.textLight} />
-      </Pressable>
-      {pendingVerifications.length > 0 && (
-        <Pressable style={[styles.quickAction, { borderLeftWidth: 3, borderLeftColor: Colors.primary }]} onPress={() => setActiveTab('verifications')}>
-          <BadgeCheck size={20} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Review Verifications ({pendingVerifications.length})</Text>
-          <ChevronRight size={18} color={Colors.textLight} />
+        <Pressable style={[styles.statCard, { backgroundColor: Colors.warning + '10' }]} onPress={() => setActiveTab('payments')}>
+          <TrendingUp size={22} color={Colors.warning} />
+          <Text style={styles.statNumber}>{money.escrowCount}</Text>
+          <Text style={styles.statLabel}>Held in escrow</Text>
         </Pressable>
-      )}
-      <Pressable style={styles.quickAction} onPress={() => setActiveTab('support')}>
-        <MessageCircle size={20} color={Colors.categoryOffice} />
-        <Text style={styles.quickActionText}>Support Inbox ({supportConversations.length})</Text>
+      </View>
+
+      <Text style={styles.sectionTitle}>Shortcuts</Text>
+      <Pressable style={styles.quickAction} onPress={() => setActiveTab('broadcast')} testID="overview-broadcast">
+        <Megaphone size={20} color={Colors.primary} />
+        <Text style={styles.quickActionText}>Send a broadcast</Text>
         <ChevronRight size={18} color={Colors.textLight} />
       </Pressable>
       <Pressable style={styles.quickAction} onPress={() => router.push('/bookings')}>
@@ -572,34 +668,12 @@ export default function AdminScreen() {
   );
 
   const renderSupport = () => (
-    <FlatList
-      data={supportConversations}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={listStyle}
-      refreshControl={refresh}
-      ListEmptyComponent={
-        <View style={styles.emptyPending}>
-          <MessageCircle size={48} color={Colors.textLight} />
-          <Text style={styles.emptyPendingTitle}>No support chats</Text>
-          <Text style={styles.emptyPendingSubtitle}>Messages members send to Support land here</Text>
-        </View>
-      }
-      renderItem={({ item: c }) => {
-        const unread = Object.entries(c.unreadCount).filter(([id]) => id !== c.participantIds[0]).reduce((s, [, n]) => s + n, 0);
-        return (
-          <Pressable style={styles.userCard} onPress={() => router.push(`/chat/${c.id}`)} testID={`support-${c.id}`}>
-            <SafeImage uri={c.participantAvatars[0]} style={styles.userAvatar} />
-            <View style={styles.userInfo}>
-              <Text style={styles.userName}>{c.participantNames[0] ?? 'Member'}</Text>
-              <Text style={styles.userEmail} numberOfLines={2}>{c.lastMessage}</Text>
-              <Text style={styles.pendingDate}>{fmtDateTime(c.lastMessageTime)}</Text>
-            </View>
-            {unread > 0 ? (
-              <View style={styles.tabBadge}><Text style={styles.tabBadgeText}>{unread}</Text></View>
-            ) : <ChevronRight size={18} color={Colors.textLight} />}
-          </Pressable>
-        );
-      }}
+    <SupportInbox
+      conversations={supportConversations}
+      staffId={user?.id ?? ''}
+      isWide={isWide}
+      refreshing={refreshing}
+      onRefresh={() => void handleRefresh()}
     />
   );
 
@@ -772,10 +846,28 @@ export default function AdminScreen() {
 
   const renderUsers = () => (
     <FlatList
-      data={allUsers}
+      data={filteredUsers}
       keyExtractor={(item) => item.id}
       contentContainerStyle={listStyle}
       refreshControl={refresh}
+      keyboardShouldPersistTaps="handled"
+      ListHeaderComponent={
+        <View style={{ gap: 10, marginBottom: 12 }}>
+          <View style={styles.searchBox}>
+            <Search size={16} color={Colors.textLight} />
+            <TextInput style={styles.searchInput} value={userSearch} onChangeText={setUserSearch} placeholder="Search name, email, phone…" placeholderTextColor={Colors.textLight} autoCapitalize="none" autoCorrect={false} testID="users-search" />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {(['all', 'landlord', 'renter', 'admin', 'superadmin'] as const).map(r => (
+              <Pressable key={r} style={[styles.filterChip, userRole === r && styles.filterChipActive]} onPress={() => setUserRole(r)} testID={`users-role-${r}`}>
+                <Text style={[styles.filterChipText, userRole === r && styles.filterChipTextActive]}>
+                  {r === 'all' ? `All (${allUsers.length})` : `${roleName(r)}s (${allUsers.filter(u => u.role === r).length})`}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      }
       renderItem={({ item: u }) => {
         const isTargetStaff = u.role === 'admin' || u.role === 'superadmin';
         const canManage = u.id !== user?.id && u.role !== 'superadmin' && (!isTargetStaff || isSuperAdmin);
@@ -863,10 +955,35 @@ export default function AdminScreen() {
 
   const renderProperties = () => (
     <FlatList
-      data={properties}
+      data={filteredListings}
       keyExtractor={(item) => item.id}
       contentContainerStyle={listStyle}
       refreshControl={refresh}
+      keyboardShouldPersistTaps="handled"
+      ListHeaderComponent={
+        <View style={{ gap: 10, marginBottom: 12 }}>
+          <View style={styles.searchBox}>
+            <Search size={16} color={Colors.textLight} />
+            <TextInput style={styles.searchInput} value={listingSearch} onChangeText={setListingSearch} placeholder="Search title, landlord, town…" placeholderTextColor={Colors.textLight} autoCapitalize="none" autoCorrect={false} testID="listings-search" />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {LISTING_FILTERS.map(f => {
+              const count = f.id === 'all' ? properties.length : f.id === 'booked' ? stats.bookedProperties : properties.filter(p => p.status === f.id).length;
+              return (
+                <Pressable key={f.id} style={[styles.filterChip, listingFilter === f.id && styles.filterChipActive]} onPress={() => setListingFilter(f.id)} testID={`listings-filter-${f.id}`}>
+                  <Text style={[styles.filterChipText, listingFilter === f.id && styles.filterChipTextActive]}>{f.label} ({count})</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      }
+      ListEmptyComponent={
+        <View style={styles.emptyPending}>
+          <Building2 size={44} color={Colors.textLight} />
+          <Text style={styles.emptyPendingTitle}>No listings match</Text>
+        </View>
+      }
       renderItem={({ item: p }) => (
         <View style={styles.propCard}>
           <Pressable style={styles.propTop} onPress={() => router.push(`/property/${p.id}`)}>
@@ -875,10 +992,17 @@ export default function AdminScreen() {
               <Text style={styles.propTitle} numberOfLines={1}>{p.title}</Text>
               <Text style={styles.propOwner}>by {p.ownerName}</Text>
               <Text style={styles.propPrice}>{p.currency}{p.price.toLocaleString()}{p.period ?? ''}</Text>
-              <View style={[styles.statusPill, { backgroundColor: p.status === 'active' ? Colors.success + '15' : Colors.warning + '15' }]}>
-                <Text style={[styles.statusText, { color: p.status === 'active' ? Colors.success : Colors.warning }]}>
-                  {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
-                </Text>
+              <View style={styles.pillRow}>
+                <View style={[styles.statusPill, { backgroundColor: p.status === 'active' ? Colors.success + '15' : Colors.warning + '15' }]}>
+                  <Text style={[styles.statusText, { color: p.status === 'active' ? Colors.success : Colors.warning }]}>
+                    {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                  </Text>
+                </View>
+                {p.occupancy === 'booked' && (
+                  <View style={[styles.statusPill, { backgroundColor: Colors.text }]} testID={`admin-booked-${p.id}`}>
+                    <Text style={[styles.statusText, { color: Colors.white }]}>Booked</Text>
+                  </View>
+                )}
               </View>
             </View>
           </Pressable>
@@ -889,6 +1013,9 @@ export default function AdminScreen() {
             <Pressable style={styles.propActionBtn} onPress={() => handleToggleFeatured(p)}>
               <Star size={16} color={p.featured ? Colors.accent : Colors.textLight} fill={p.featured ? Colors.accent : 'transparent'} />
             </Pressable>
+            <Pressable style={styles.propActionBtn} onPress={() => handleToggleOccupancy(p)} testID={`admin-occupancy-${p.id}`}>
+              {p.occupancy === 'booked' ? <DoorOpen size={16} color={Colors.success} /> : <DoorClosed size={16} color={Colors.textSecondary} />}
+            </Pressable>
             <Pressable style={[styles.propActionBtn, { backgroundColor: Colors.error + '10' }]} onPress={() => handleDeleteProperty(p)}>
               <Trash2 size={16} color={Colors.error} />
             </Pressable>
@@ -897,6 +1024,47 @@ export default function AdminScreen() {
       )}
     />
   );
+
+  const badgeFor = (tab: AdminTab): number => {
+    if (tab === 'pending') return pendingProperties.length;
+    if (tab === 'verifications') return pendingVerifications.length;
+    if (tab === 'support') return supportUnread;
+    if (tab === 'notifications') return notifications.filter(n => !n.read).length;
+    if (tab === 'payments') return money.failedPayouts;
+    return 0;
+  };
+
+  const selectTab = (tab: AdminTab) => {
+    void Haptics.selectionAsync();
+    setActiveTab(tab);
+    if (tab === 'users' || tab === 'verifications' || tab === 'overview') void loadUsers();
+  };
+
+  const renderTabButton = (tab: AdminTab) => {
+    const active = activeTab === tab;
+    const badge = badgeFor(tab);
+    const color = active ? (hasSidebar ? Colors.primary : Colors.white) : Colors.textSecondary;
+    return (
+      <Pressable
+        key={tab}
+        style={hasSidebar ? [styles.sideItem, active && styles.sideItemActive] : [styles.tab, active && styles.tabActive]}
+        onPress={() => selectTab(tab)}
+        testID={`admin-tab-${tab}`}
+      >
+        <View style={styles.tabInner}>
+          <TabIcon tab={tab} color={color} />
+          <Text style={[hasSidebar ? styles.sideItemText : styles.tabText, { color }, active && { fontWeight: '700' as const }, hasSidebar && { flex: 1 }]} numberOfLines={1}>
+            {TAB_LABELS[tab]}
+          </Text>
+          {badge > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{badge}</Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -913,50 +1081,44 @@ export default function AdminScreen() {
             <LogOut size={20} color={Colors.error} />
           </Pressable>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar} style={styles.tabBarWrap}>
-          {tabs.map(tab => (
-            <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => { setActiveTab(tab); if (tab === 'users' || tab === 'verifications' || tab === 'overview') void loadUsers(); }} testID={`admin-tab-${tab}`}>
-              <View style={styles.tabInner}>
-                {tab === 'activity' && <Activity size={13} color={activeTab === tab ? Colors.white : Colors.textSecondary} />}
-                {tab === 'audit' && <ScrollText size={13} color={activeTab === tab ? Colors.white : Colors.textSecondary} />}
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]} numberOfLines={1}>
-                  {TAB_LABELS[tab]}
-                </Text>
-                {tab === 'pending' && pendingProperties.length > 0 && (
-                  <View style={styles.tabBadge}>
-                    <Text style={styles.tabBadgeText}>{pendingProperties.length}</Text>
-                  </View>
-                )}
-                {tab === 'verifications' && pendingVerifications.length > 0 && (
-                  <View style={styles.tabBadge}>
-                    <Text style={styles.tabBadgeText}>{pendingVerifications.length}</Text>
-                  </View>
-                )}
-                {tab === 'support' && supportUnread > 0 && (
-                  <View style={styles.tabBadge}>
-                    <Text style={styles.tabBadgeText}>{supportUnread}</Text>
-                  </View>
-                )}
-                {tab === 'notifications' && notifications.some(n => !n.read) && (
-                  <View style={styles.tabBadge}>
-                    <Text style={styles.tabBadgeText}>{notifications.filter(n => !n.read).length}</Text>
-                  </View>
-                )}
+        {!hasSidebar && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar} style={styles.tabBarWrap}>
+            {navGroups.map((g, gi) => (
+              <View key={g.id} style={styles.navGroupInline}>
+                {gi > 0 && <View style={styles.navDivider} />}
+                {g.tabs.length > 1 && <Text style={styles.navGroupLabelInline}>{g.label}</Text>}
+                {g.tabs.map(renderTabButton)}
               </View>
-            </Pressable>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        )}
       </SafeAreaView>
 
-      {activeTab === 'overview' && renderOverview()}
-      {activeTab === 'pending' && renderPending()}
-      {activeTab === 'verifications' && renderVerifications()}
-      {activeTab === 'users' && renderUsers()}
-      {activeTab === 'properties' && renderProperties()}
-      {activeTab === 'support' && renderSupport()}
-      {activeTab === 'notifications' && renderNotifications()}
-      {activeTab === 'activity' && isSuperAdmin && renderActivity()}
-      {activeTab === 'audit' && isSuperAdmin && renderAudit()}
+      <View style={styles.body}>
+        {hasSidebar && (
+          <ScrollView style={styles.sidebar} contentContainerStyle={styles.sidebarContent}>
+            {navGroups.map(g => (
+              <View key={g.id} style={styles.sideGroup}>
+                <Text style={styles.sideGroupLabel}>{g.label.toUpperCase()}</Text>
+                {g.tabs.map(renderTabButton)}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+        <View style={styles.main}>
+          {activeTab === 'overview' && renderOverview()}
+          {activeTab === 'pending' && renderPending()}
+          {activeTab === 'verifications' && renderVerifications()}
+          {activeTab === 'users' && renderUsers()}
+          {activeTab === 'properties' && renderProperties()}
+          {activeTab === 'support' && renderSupport()}
+          {activeTab === 'notifications' && renderNotifications()}
+          {activeTab === 'payments' && <MoneyPanel contentStyle={listStyle} />}
+          {activeTab === 'broadcast' && <BroadcastPanel contentStyle={listStyle} />}
+          {activeTab === 'activity' && isSuperAdmin && renderActivity()}
+          {activeTab === 'audit' && isSuperAdmin && renderAudit()}
+        </View>
+      </View>
     </View>
   );
 }
@@ -969,7 +1131,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '700' as const, color: Colors.text },
   headerSub: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
   tabBarWrap: { flexGrow: 0, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  tabBar: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12, gap: 8 },
+  tabBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12, gap: 6 },
   tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, backgroundColor: Colors.background, alignItems: 'center' },
   segment: { flexDirection: 'row', backgroundColor: Colors.white, borderRadius: 12, padding: 4, gap: 4, marginBottom: 12 },
   segmentBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
@@ -1008,9 +1170,9 @@ const styles = StyleSheet.create({
   deniedTitle: { fontSize: 18, fontWeight: '600' as const, color: Colors.text },
   sectionTitle: { fontSize: 16, fontWeight: '700' as const, color: Colors.text, marginBottom: 12, marginTop: 8 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  statCard: { width: '47%', padding: 16, borderRadius: 16, alignItems: 'center', gap: 8 },
+  statCard: { flexGrow: 1, flexBasis: '46%', padding: 16, borderRadius: 16, alignItems: 'center', gap: 6 },
   statNumber: { fontSize: 28, fontWeight: '800' as const, color: Colors.text },
-  statLabel: { fontSize: 12, fontWeight: '500' as const, color: Colors.textSecondary },
+  statLabel: { fontSize: 12, fontWeight: '500' as const, color: Colors.textSecondary, textAlign: 'center' as const },
   breakdownCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 16, gap: 12 },
   breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   breakdownLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1042,7 +1204,31 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '600' as const },
   propActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: Colors.borderLight, padding: 8, gap: 8 },
   propActionBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.background, alignItems: 'center' },
-  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  body: { flex: 1, flexDirection: 'row' },
+  main: { flex: 1 },
+  sidebar: { width: 232, flexGrow: 0, backgroundColor: Colors.white, borderRightWidth: 1, borderRightColor: Colors.borderLight },
+  sidebarContent: { padding: 14, gap: 18 },
+  sideGroup: { gap: 2 },
+  sideGroupLabel: { fontSize: 10, fontWeight: '800' as const, color: Colors.textLight, letterSpacing: 1, marginBottom: 4, marginLeft: 10 },
+  sideItem: { paddingVertical: 9, paddingHorizontal: 10, borderRadius: 10 },
+  sideItemActive: { backgroundColor: Colors.primaryLight },
+  sideItemText: { fontSize: 14, fontWeight: '500' as const },
+  navGroupInline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navGroupLabelInline: { fontSize: 10, fontWeight: '800' as const, color: Colors.textLight, letterSpacing: 0.6, textTransform: 'uppercase' as const, marginRight: 2 },
+  navDivider: { width: 1, height: 22, backgroundColor: Colors.border, marginHorizontal: 6 },
+  hero: { backgroundColor: Colors.primary, borderRadius: 20, padding: 20, marginBottom: 8, marginTop: 4 },
+  heroKicker: { fontSize: 11, fontWeight: '800' as const, color: Colors.white + 'B3', letterSpacing: 1 },
+  heroTitle: { fontSize: 26, fontWeight: '800' as const, color: Colors.white, marginTop: 6 },
+  heroSub: { fontSize: 13, color: Colors.white + 'D9', marginTop: 4 },
+  countPill: { minWidth: 24, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
+  countPillText: { color: Colors.white, fontSize: 12, fontWeight: '800' as const },
+  chipRow: { gap: 8 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  filterChipActive: { backgroundColor: Colors.text, borderColor: Colors.text },
+  filterChipText: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary },
+  filterChipTextActive: { color: Colors.white },
+  pillRow: { flexDirection: 'row', gap: 6 },
   tabBadge: { backgroundColor: Colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   tabBadgeText: { color: Colors.white, fontSize: 9, fontWeight: '700' as const },
   emptyPending: { alignItems: 'center', paddingVertical: 80, gap: 12 },

@@ -14,19 +14,13 @@ import { DurableObject } from "cloudflare:workers";
 // @ts-expect-error — cross-folder import; resolved by the bundler.
 import app from "../expo/backend/hono";
 // @ts-expect-error — cross-folder import; resolved by the bundler.
-import {
-  configureBootstrapCredentials,
-  store,
-  setPersistenceAdapter,
-  type PersistedData,
-  type StoredBlob,
-} from "../expo/backend/store";
+import { store, setPersistenceAdapter, type PersistedData, type StoredBlob } from "../expo/backend/store";
+// @ts-expect-error — cross-folder import; resolved by the bundler.
+import { setServerEnv } from "../expo/backend/env";
+// @ts-expect-error — cross-folder import; resolved by the bundler.
+import { drainOutbox } from "../expo/backend/sms";
 
 type StateRow = { key: string; value: string };
-type Env = {
-  PS_BOOTSTRAP_ADMIN_PASSWORD?: string;
-  PS_BOOTSTRAP_SUPERADMIN_PASSWORD?: string;
-};
 type BlobRow = {
   id: string;
   mime: string;
@@ -40,12 +34,10 @@ type BlobRow = {
 export class PerfectSpaceStore extends DurableObject {
   private ready: Promise<void>;
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env);
-    configureBootstrapCredentials({
-      adminPassword: env.PS_BOOTSTRAP_ADMIN_PASSWORD,
-      superAdminPassword: env.PS_BOOTSTRAP_SUPERADMIN_PASSWORD,
-    });
+    // Secrets (Paystack, mNotify) reach the shared backend through here.
+    setServerEnv(env);
 
     // Load persisted state and install the SQLite adapter BEFORE serving any
     // request, so even the first call sees durable data instead of seeds.
@@ -104,6 +96,8 @@ export class PerfectSpaceStore extends DurableObject {
             ["userSettings", data.userSettings],
             ["sessions", data.sessions],
             ["auditLog", data.auditLog],
+            ["payments", data.payments ?? []],
+            ["payouts", data.payouts ?? []],
           ];
           for (const [key, value] of entries) {
             ctx.storage.sql.exec(
@@ -162,6 +156,13 @@ export class PerfectSpaceStore extends DurableObject {
       store.flush();
     } catch (e) {
       console.error("[DO] flush failed:", e);
+    }
+
+    // Send any SMS the request queued (mNotify). Never fail the request on it.
+    try {
+      await drainOutbox();
+    } catch (e) {
+      console.error("[DO] sms drain failed:", e);
     }
 
     return response;

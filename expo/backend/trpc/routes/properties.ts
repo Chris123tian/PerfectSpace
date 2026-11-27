@@ -9,6 +9,7 @@ import {
 import { store, ADMINS_INBOX } from "../../store";
 import { audit, fail } from "../helpers";
 import type { Property, User } from "../../../types/property";
+import { notifyUser } from "../../notify";
 
 const text = (max: number) => z.string().trim().max(max);
 
@@ -58,16 +59,8 @@ function findPropertyIndex(id: string) {
 }
 
 function notify(userId: string, title: string, message: string, propertyId: string) {
-  store.notifications.unshift({
-    id: store.generateId("n"),
-    userId,
-    title,
-    message,
-    type: "property",
-    read: false,
-    createdAt: new Date().toISOString(),
-    data: { propertyId },
-  });
+  // Staff inbox items stay in-app; members also get an SMS.
+  notifyUser(userId, { title, message, type: "property", data: { propertyId }, sms: userId === ADMINS_INBOX ? false : undefined });
 }
 
 export const propertiesRouter = createTRPCRouter({
@@ -146,6 +139,22 @@ export const propertiesRouter = createTRPCRouter({
         targetId: current.id,
         detail: `fields=${Object.keys(updates).join(",")}`,
       });
+      return store.properties[idx];
+    }),
+
+  /** Owner or staff mark a listing booked / available again. */
+  setOccupancy: protectedProcedure
+    .input(z.object({ id: z.string().max(64), occupancy: z.enum(["available", "booked"]) }))
+    .mutation(({ input, ctx }) => {
+      const idx = findPropertyIndex(input.id);
+      const p = store.properties[idx];
+      if (!canManage(ctx.user, p)) fail("FORBIDDEN", "You can't change this listing.");
+      store.properties[idx] = {
+        ...p,
+        occupancy: input.occupancy,
+        bookedAt: input.occupancy === "booked" ? new Date().toISOString() : undefined,
+      };
+      audit(ctx, `property.${input.occupancy}`, { targetType: "property", targetId: p.id, detail: p.title });
       return store.properties[idx];
     }),
 

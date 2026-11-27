@@ -30,6 +30,16 @@ export default function SettingsScreen() {
   const pushEnabled = settingsQuery.data?.pushEnabled ?? true;
   const emailEnabled = settingsQuery.data?.emailEnabled ?? true;
   const darkMode = settingsQuery.data?.darkMode ?? false;
+  const smsEnabled = settingsQuery.data?.smsEnabled ?? true;
+
+  const handleToggleSms = useCallback(async (v: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await updateSettings({ smsEnabled: v });
+    } catch (e) {
+      console.log('[Settings] SMS toggle error:', e);
+    }
+  }, [updateSettings]);
 
   const handleTogglePush = useCallback(async (v: boolean) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -145,6 +155,17 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Switch value={emailEnabled} onValueChange={handleToggleEmail} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={emailEnabled ? Colors.primary : Colors.textLight} />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              <View style={styles.iconBg}><Bell size={18} color={Colors.success} /></View>
+              <View>
+                <Text style={styles.settingLabel}>SMS Alerts</Text>
+                <Text style={styles.settingDesc}>Bookings, payments & payouts by text to your phone</Text>
+              </View>
+            </View>
+            <Switch value={smsEnabled} onValueChange={handleToggleSms} trackColor={{ false: Colors.border, true: Colors.primaryLight }} thumbColor={smsEnabled ? Colors.primary : Colors.textLight} testID="sms-toggle" />
           </View>
         </View>
 

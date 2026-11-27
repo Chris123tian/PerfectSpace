@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import {
   Settings, ChevronRight, Heart, Star, Shield, Bell, HelpCircle, LogOut,
-  Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck, Lock,
+  Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck, Lock, Wallet,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -64,6 +64,7 @@ export default function ProfileScreen() {
         { id: 'my-listings', icon: <Home size={20} color={Colors.primary} />, label: 'My Listings', subtitle: `${myProperties.length} properties`, action: () => router.push('/my-listings'), showArrow: true },
         { id: 'add-property', icon: <Plus size={20} color={Colors.success} />, label: 'Add New Property', action: () => router.push('/add-property'), showArrow: true },
         { id: 'bookings', icon: <Calendar size={20} color={Colors.accent} />, label: 'Viewing Requests', subtitle: pendingBookings > 0 ? `${pendingBookings} pending` : 'No pending', action: () => router.push('/bookings'), showArrow: true, badge: pendingBookings || undefined },
+        { id: 'payments', icon: <Wallet size={20} color={Colors.primaryDark} />, label: 'Earnings & Withdraw', subtitle: 'Release codes, MoMo & bank payouts', action: () => router.push('/payments'), showArrow: true },
       ],
     });
   }
@@ -74,6 +75,7 @@ export default function ProfileScreen() {
       items: [
         { id: 'saved', icon: <Heart size={20} color={Colors.error} />, label: 'Saved Properties', subtitle: `${savedPropertyIds.length} saved`, action: () => router.push('/saved'), showArrow: true },
         { id: 'bookings', icon: <Calendar size={20} color={Colors.accent} />, label: 'My Bookings', subtitle: pendingBookings > 0 ? `${pendingBookings} pending` : 'No pending', action: () => router.push('/bookings'), showArrow: true, badge: pendingBookings || undefined },
+        { id: 'payments', icon: <Wallet size={20} color={Colors.primaryDark} />, label: 'Payments & Receipts', subtitle: 'Release codes and receipts', action: () => router.push('/payments'), showArrow: true },
       ],
     });
   }

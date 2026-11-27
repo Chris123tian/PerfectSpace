@@ -8,6 +8,8 @@ import { appRouter } from "./trpc/app-router";
 import { bearerToken, clientIp, createContext, resolveSession } from "./trpc/create-context";
 import { store } from "./store";
 import { randomToken, safeEqual } from "./security";
+import { applyTransferResult, finalizePaid, markPaymentFailed, paystackConfigured, verifyWebhookSignature } from "./paystack";
+import { drainOutbox, smsConfigured } from "./sms";
 
 const app = new Hono();
 
@@ -182,6 +184,40 @@ app.get("/api/images/:id", async (c) => {
   });
 });
 
+// ── Paystack webhook ──────────────────────────────────────────────────────
+// Set https://<backend>/api/paystack/webhook as the webhook URL in Paystack.
+app.post("/api/paystack/webhook", bodyLimit({ maxSize: 256 * 1024 }), async (c) => {
+  await store.ensureMigrated();
+  const raw = await c.req.text();
+  if (!(await verifyWebhookSignature(raw, c.req.header("x-paystack-signature") ?? null))) {
+    return c.json({ error: "bad signature" }, 401);
+  }
+  let evt: { event?: string; data?: any };
+  try {
+    evt = JSON.parse(raw);
+  } catch {
+    return c.json({ error: "bad json" }, 400);
+  }
+  const d = evt.data ?? {};
+  switch (evt.event) {
+    case "charge.success":
+      if (d.reference) finalizePaid(String(d.reference), d);
+      break;
+    case "charge.failed":
+      if (d.reference) markPaymentFailed(String(d.reference), "failed");
+      break;
+    case "transfer.success":
+    case "transfer.failed":
+    case "transfer.reversed":
+      if (d.reference) applyTransferResult(String(d.reference), evt.event.split(".")[1], d.reason ?? d.gateway_response);
+      break;
+  }
+  store.flush();
+  // Local/Node runtime has no DO wrapper to drain the SMS queue.
+  await drainOutbox();
+  return c.json({ received: true });
+});
+
 // ── Health / Status endpoints ─────────────────────────────────────────────────
 app.get("/", (c) => {
   return c.json({ status: "ok", message: "Perfect Space API is running" });
@@ -195,6 +231,8 @@ app.get("/api/health", (c) => {
   return c.json({
     status: "ok",
     message: "Perfect Space API is healthy",
+    payments: paystackConfigured(),
+    sms: smsConfigured(),
     timestamp: new Date().toISOString(),
   });
 });

@@ -74,12 +74,19 @@ function PropertyCard({ property, compact = false, containerStyle }: PropertyCar
         testID={`property-card-${property.id}`}
       >
         <Animated.View style={[styles.compactCard, { transform: [{ scale: scaleAnim }] }]}>
-          <SafeImage
-            uri={property.images[0]}
-            style={styles.compactImage}
-            contentFit="cover"
-            transition={200}
-          />
+          <View>
+            <SafeImage
+              uri={property.images[0]}
+              style={styles.compactImage}
+              contentFit="cover"
+              transition={200}
+            />
+            {property.occupancy === 'booked' && (
+              <View style={styles.bookedRibbonSmall} testID={`booked-badge-${property.id}`}>
+                <Text style={styles.bookedRibbonText}>Booked</Text>
+              </View>
+            )}
+          </View>
           <View style={styles.compactInfo}>
             <View style={[styles.typeBadgeSmall, { backgroundColor: typeColors[property.type] + '20' }]}>
               <Text style={[styles.typeBadgeTextSmall, { color: typeColors[property.type] }]}>
@@ -133,6 +140,11 @@ function PropertyCard({ property, compact = false, containerStyle }: PropertyCar
               </Text>
             </View>
           </View>
+          {property.occupancy === 'booked' && (
+            <View style={styles.bookedRibbon} testID={`booked-badge-${property.id}`}>
+              <Text style={styles.bookedRibbonText}>Booked</Text>
+            </View>
+          )}
           {property.featured && (
             <View style={styles.featuredBadge}>
               <Star size={10} color={Colors.accent} fill={Colors.accent} />
@@ -188,6 +200,25 @@ function PropertyCard({ property, compact = false, containerStyle }: PropertyCar
 export default React.memo(PropertyCard);
 
 const styles = StyleSheet.create({
+  bookedRibbon: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    backgroundColor: Colors.error,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  bookedRibbonSmall: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: Colors.error,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  bookedRibbonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
   card: {
     backgroundColor: Colors.card,
     borderRadius: 16,

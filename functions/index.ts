@@ -1,4 +1,4 @@
-// build: 2026-11-15 ip-throttle
+// build: 2026-11-27 payments-sms keys
 // functions/index.ts — Perfect Space backend entrypoint.
 //
 // All API traffic is dispatched into the PerfectSpaceStore Durable Object
@@ -14,11 +14,7 @@ import { PerfectSpaceStore } from "./perfect-space-store";
 // Re-export so the platform's DO dispatcher can find the class in the bundle.
 export { PerfectSpaceStore };
 
-type Env = {
-  DO: Fetcher;
-  PS_BOOTSTRAP_ADMIN_PASSWORD?: string;
-  PS_BOOTSTRAP_SUPERADMIN_PASSWORD?: string;
-};
+type Env = { DO: Fetcher };
 
 // Direct-to-worker health route (also served via the DO at /api/health).
 // v2: auth gains dob/country/region fields, password change and document verification;

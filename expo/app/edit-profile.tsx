@@ -163,15 +163,19 @@ export default function EditProfileScreen() {
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await submitVerification({
+      const updated = await submitVerification({
         documentType: docType,
         documentName: docName.trim(),
         documentNumber: docNumber.trim() || undefined,
-        documentImage: docImage,
+        documentImage: docImage || undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowVerifyForm(false);
-      showAlert('Submitted', 'Your document is awaiting review by our team.');
+      if (updated.verification?.status === 'approved') {
+        showAlert('Verified!', 'The name on your document matches your account — you are now verified.');
+      } else {
+        showAlert('Submitted', 'Your document is under review. Our team will verify it shortly.');
+      }
     } catch (e) {
       console.log('[EditProfile] Verification error:', e);
       showAlert('Error', e instanceof Error ? e.message : 'Could not submit your document. Please try again.');
@@ -372,7 +376,7 @@ export default function EditProfileScreen() {
                   </View>
                   <Text style={styles.inputLabel}>Full name on document</Text>
                   <TextInput style={styles.input} value={docName} onChangeText={setDocName} placeholder="Exactly as printed" placeholderTextColor={Colors.textLight} testID="doc-name" />
-                  <Text style={styles.verifyHintSmall}>Your identity document will be reviewed by our team before your account is verified.</Text>
+                  <Text style={styles.verifyHintSmall}>If this matches your account name, verification is instant.</Text>
                   <Text style={styles.inputLabel}>Document number (optional)</Text>
                   <TextInput style={styles.input} value={docNumber} onChangeText={setDocNumber} placeholder="e.g. GHA-123456789-0" placeholderTextColor={Colors.textLight} testID="doc-number" />
                   <Pressable style={styles.docImageBtn} onPress={handlePickDocImage} disabled={docUploading} testID="doc-image">

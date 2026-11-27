@@ -28,6 +28,7 @@ import { countryOptions, findCountry } from '@/lib/countries';
 import { useFilters } from '@/contexts/FilterContext';
 import { useData } from '@/contexts/DataContext';
 import { regionOptions, townOptions } from '@/lib/regions';
+import SelectField from '@/components/SelectField';
 
 const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }[] = [
   { key: 'apartment', label: 'Apartment', icon: <Building2 size={20} color={Colors.categoryApartment} /> },
@@ -57,7 +58,7 @@ export default function FiltersScreen() {
   const towns = useMemo(() => townOptions(selectedCountry, region, activeProperties), [selectedCountry, region, activeProperties]);
   const townQuery = town.trim().toLowerCase();
   const townSuggestions = useMemo(
-    () => towns.filter(t => !townQuery || t.toLowerCase().includes(townQuery)).slice(0, 18),
+    () => towns.filter(t => !townQuery || t.toLowerCase().includes(townQuery)).slice(0, 10),
     [towns, townQuery]
   );
   const visibleRegions = showAllRegions ? regions : regions.slice(0, 12);
@@ -185,8 +186,23 @@ export default function FiltersScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Country</Text>
           <Text style={styles.sectionHint}>Search listings in a specific market</Text>
-          <View style={styles.cityGrid}>
-            {countryOptions.map((c) => (
+          <SelectField
+            value={selectedCountry}
+            options={countryOptions.map(c => ({ value: c.name, leading: c.flag, hint: c.currency }))}
+            title="Country"
+            placeholder="Any African country"
+            clearable
+            onChange={(v) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setSelectedCountry(v);
+              setCurrency(v ? findCountry(v)?.currency ?? null : null);
+              setRegion(null);
+              setTown('');
+            }}
+            testID="filter-country"
+          />
+          <View style={[styles.cityGrid, { marginTop: 10 }]}>
+            {countryOptions.slice(0, 4).map((c) => (
               <Pressable
                 key={c.name}
                 style={[styles.cityChip, selectedCountry === c.name && styles.cityChipActive]}
@@ -218,7 +234,17 @@ export default function FiltersScreen() {
           {regions.length === 0 ? (
             <Text style={styles.emptyHint}>No regions yet for this selection.</Text>
           ) : (
-            <View style={styles.cityGrid}>
+            <>
+            <SelectField
+              value={region}
+              options={regions}
+              title={selectedCountry ? `Regions in ${selectedCountry}` : 'Regions'}
+              placeholder="Any region"
+              clearable
+              onChange={(v) => { setRegion(v); setTown(''); }}
+              testID="filter-region"
+            />
+            <View style={[styles.cityGrid, { marginTop: 10 }]}>
               {visibleRegions.map((r) => (
                 <Pressable
                   key={r}
@@ -239,17 +265,29 @@ export default function FiltersScreen() {
                 </Pressable>
               )}
             </View>
+            </>
           )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Town / City / Area</Text>
-          <Text style={styles.sectionHint}>Type a town or neighbourhood, or tap a suggestion</Text>
+          <Text style={styles.sectionHint}>Pick a town, or type any neighbourhood</Text>
+          <SelectField
+            value={town || null}
+            options={towns}
+            title={region ? `Towns in ${region}` : selectedCountry ? `Towns in ${selectedCountry}` : 'Towns'}
+            placeholder="Any town"
+            allowCustom
+            clearable
+            onChange={(v) => setTown(v ?? '')}
+            testID="filter-town"
+          />
+          <View style={{ height: 10 }} />
           <View style={styles.townInputWrap}>
             <MapPin size={16} color={Colors.textLight} />
             <TextInput
               style={styles.townInput}
-              placeholder="e.g. East Legon, Kumasi, Brooklyn"
+              placeholder="Or type e.g. East Legon, Kumasi"
               placeholderTextColor={Colors.textLight}
               value={town}
               onChangeText={setTown}

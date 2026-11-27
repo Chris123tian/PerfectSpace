@@ -3,6 +3,7 @@ import { createTRPCRouter, isStaff, protectedProcedure } from "../create-context
 import { store } from "../../store";
 import { audit, fail } from "../helpers";
 import type { ChatMessage, Conversation, User } from "../../../types/property";
+import { notifyUser } from "../../notify";
 
 const SUPPORT = "support";
 
@@ -56,11 +57,22 @@ export const conversationsRouter = createTRPCRouter({
       for (const id of conv.participantIds) {
         if (id !== ctx.user.id) unread[id] = (unread[id] ?? 0) + 1;
       }
-      // A staff reply in a support chat clears the staff inbox counter.
+      // A staff reply in a support chat clears the staff inbox counter and
+      // tells the member (in-app + SMS).
       if (isStaff(ctx.user) && conv.propertyId === SUPPORT) {
         for (const id of conv.participantIds) {
           const u = store.users.find((x) => x.id === id);
           if (isStaff(u)) unread[id] = 0;
+        }
+        const memberId = conv.participantIds[0];
+        if (memberId && memberId !== ctx.user.id) {
+          notifyUser(memberId, {
+            title: "Support replied",
+            message: input.text.length > 140 ? input.text.slice(0, 137) + "..." : input.text,
+            type: "support",
+            data: { conversationId: conv.id },
+            sms: `Perfect Space Support: ${input.text.slice(0, 300)}`,
+          });
         }
       }
       store.conversations[convIdx] = {

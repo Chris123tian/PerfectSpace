@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import PayPanel from '@/components/PayPanel';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 
@@ -357,6 +358,11 @@ export default function PropertyDetailScreen() {
             <View style={styles.listingBadge}>
               <Text style={styles.listingBadgeText}>For {property.listingType === 'rent' ? 'Rent' : 'Sale'}</Text>
             </View>
+            {property.occupancy === 'booked' && (
+              <View style={styles.bookedBadge} testID="detail-booked-badge">
+                <Text style={styles.bookedBadgeText}>Booked</Text>
+              </View>
+            )}
           </View>
 
           <Text style={styles.title}>{property.title}</Text>
@@ -393,6 +399,8 @@ export default function PropertyDetailScreen() {
               <Text style={styles.statLabel}>Sq. Ft.</Text>
             </View>
           </View>
+
+          <PayPanel property={property} user={user} onSignIn={promptSignIn} />
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
@@ -663,6 +671,8 @@ export default function PropertyDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  bookedBadge: { backgroundColor: Colors.error, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  bookedBadgeText: { color: Colors.white, fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   container: { flex: 1, backgroundColor: Colors.white },
   errorContainer: { flex: 1, backgroundColor: Colors.background },
   errorText: { fontSize: 18, color: Colors.textSecondary, textAlign: 'center', marginTop: 100 },

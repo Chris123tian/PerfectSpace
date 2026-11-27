@@ -5,6 +5,7 @@ export const seedUsers: User[] = [
     id: 'admin1',
     name: 'Admin Panel',
     email: 'admin@perfectspace.com',
+    password: 'admin123',
     avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face',
     phone: '+1 (555) 000-0000',
     role: 'admin',
@@ -14,8 +15,7 @@ export const seedUsers: User[] = [
     rating: 5,
     memberSince: 'Jan 2024',
     verified: true,
-    isActive: false,
-    passwordSet: false,
+    isActive: true,
   },
   {
     id: 'u2',

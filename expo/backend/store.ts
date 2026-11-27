@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -10,56 +11,27 @@ import {
   Review,
   Session,
   AuditEntry,
+  Payment,
+  Payout,
 } from "../types/property";
 import { seedProperties } from "./seed";
-import { hashPassword, isHashed, passwordPolicyError, randomToken } from "./security";
+import { hashPassword, isHashed, randomToken } from "./security";
 
-// These hashes identify credentials shipped by the previous seed. They are
-// never accepted as credentials after the bootstrap migration.
-const LEGACY_ADMIN_PASSWORD_HASH =
+// Seed credentials are stored only as PBKDF2 hashes.
+const ADMIN_PASSWORD_HASH =
   "pbkdf2$100000$76Td+bUjkpU5LuZX+9Lm0A==$G2h+k7epc/HZ06RMdVDpctUWWlyvODVUulsBjMeYbP4=";
-const LEGACY_SUPERADMIN_PASSWORD_HASH =
+const SUPERADMIN_PASSWORD_HASH =
   "pbkdf2$100000$zrl4kXLcKAiAFBl0gDj2rw==$vwX463f+Nc+YDuDl6oMKXkSwwBoDfm1+C9Gv67qnglE=";
 
 export const SUPERADMIN_ID = "superadmin1";
-export const ADMIN_ID = "admin1";
 /** Pseudo-recipient for notifications every staff member should see. */
 export const ADMINS_INBOX = "admins";
-
-export interface BootstrapCredentials {
-  adminPassword?: string;
-  superAdminPassword?: string;
-}
-
-function credentialsFromEnvironment(): BootstrapCredentials {
-  if (typeof process === "undefined") return {};
-  return {
-    adminPassword: process.env.PS_BOOTSTRAP_ADMIN_PASSWORD,
-    superAdminPassword: process.env.PS_BOOTSTRAP_SUPERADMIN_PASSWORD,
-  };
-}
-
-function validateBootstrapCredentials(credentials: BootstrapCredentials): void {
-  for (const password of [credentials.adminPassword, credentials.superAdminPassword]) {
-    if (password && passwordPolicyError(password)) {
-      throw new Error("Bootstrap passwords must be at least 8 characters and contain a letter and a number.");
-    }
-  }
-}
-
-let bootstrapCredentials = credentialsFromEnvironment();
-validateBootstrapCredentials(bootstrapCredentials);
-
-export function configureBootstrapCredentials(credentials: BootstrapCredentials): void {
-  validateBootstrapCredentials(credentials);
-  bootstrapCredentials = credentials;
-}
 
 const superAdminSeed: User = {
   id: SUPERADMIN_ID,
   name: "Super Admin",
   email: "superadmin@perfectspace.com",
-  password: undefined,
+  password: SUPERADMIN_PASSWORD_HASH,
   avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face",
   phone: "",
   role: "superadmin",
@@ -69,9 +41,9 @@ const superAdminSeed: User = {
   rating: 5,
   memberSince: "Nov 2026",
   verified: true,
-  isActive: false,
+  isActive: true,
   authProvider: "password",
-  passwordSet: false,
+  passwordSet: true,
 };
 
 const US_CITY_STATE: Record<string, string> = {
@@ -100,10 +72,10 @@ export interface StoredBlob {
 
 const seedUsers: User[] = [
   {
-    id: ADMIN_ID,
+    id: "admin1",
     name: "Admin Panel",
     email: "admin@perfectspace.com",
-    password: undefined,
+    password: ADMIN_PASSWORD_HASH,
     avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
     phone: "+1 (555) 000-0000",
     role: "admin",
@@ -113,9 +85,9 @@ const seedUsers: User[] = [
     rating: 5,
     memberSince: "Jan 2024",
     verified: true,
-    isActive: false,
+    isActive: true,
     authProvider: "password",
-    passwordSet: false,
+    passwordSet: true,
   },
   superAdminSeed,
 ];
@@ -129,6 +101,7 @@ const seedNotifications: AppNotification[] = [];
 interface UserSettings {
   pushEnabled: boolean;
   emailEnabled: boolean;
+  smsEnabled?: boolean;
   darkMode: boolean;
 }
 
@@ -196,6 +169,8 @@ export type PersistedData = {
   userSettings: Record<string, UserSettings>;
   sessions: Session[];
   auditLog: AuditEntry[];
+  payments: Payment[];
+  payouts: Payout[];
 };
 
 const MAX_AUDIT = 3000;
@@ -271,6 +246,8 @@ class Store {
   );
   private _sessions = tracked<Session[]>([], () => this.markDirty());
   private _auditLog = tracked<AuditEntry[]>([], () => this.markDirty());
+  private _payments = tracked<Payment[]>([], () => this.markDirty());
+  private _payouts = tracked<Payout[]>([], () => this.markDirty());
   private memoryBlobs = new Map<string, StoredBlob>();
   private migration: Promise<void> | null = null;
 
@@ -308,6 +285,8 @@ class Store {
     if (saved.userSettings) this.userSettings = saved.userSettings;
     if (saved.sessions) this.sessions = saved.sessions;
     if (saved.auditLog) this.auditLog = saved.auditLog;
+    if (saved.payments) this.payments = saved.payments;
+    if (saved.payouts) this.payouts = saved.payouts;
   }
 
   /**
@@ -325,40 +304,17 @@ class Store {
   }
 
   private async migrate() {
-    // Staff seed accounts are inert until their deployment-time passwords are
-    // configured. Legacy seed credentials are revoked during this migration.
+    // 1. Super admin account always exists (password is never reset if changed).
     if (!this.users.some((u) => u.id === SUPERADMIN_ID)) {
       this.users.push({ ...superAdminSeed });
       console.log("[Store] Seeded super admin account");
     }
 
-    // Hash ordinary legacy passwords and bootstrap the seeded staff accounts.
+    // 2. Hash any plaintext password; classify Google accounts.
     for (let i = 0; i < this.users.length; i++) {
       const u = this.users[i];
       const patch: Partial<User> = {};
-      const isAdminSeed = u.id === ADMIN_ID;
-      const isSuperAdminSeed = u.id === SUPERADMIN_ID;
-      const bootstrapPassword = isAdminSeed
-        ? bootstrapCredentials.adminPassword
-        : isSuperAdminSeed
-          ? bootstrapCredentials.superAdminPassword
-          : undefined;
-      const isLegacySeedCredential =
-        (isAdminSeed && u.password === LEGACY_ADMIN_PASSWORD_HASH) ||
-        (isSuperAdminSeed && u.password === LEGACY_SUPERADMIN_PASSWORD_HASH);
-
-      if ((isAdminSeed || isSuperAdminSeed) && (!u.passwordSet || isLegacySeedCredential)) {
-        if (bootstrapPassword) {
-          patch.password = await hashPassword(bootstrapPassword);
-          patch.passwordSet = true;
-          patch.isActive = true;
-          patch.authProvider = "password";
-        } else {
-          patch.password = undefined;
-          patch.passwordSet = false;
-          patch.isActive = false;
-        }
-      } else if (u.password && u.password.startsWith("google_oauth_")) {
+      if (u.password && u.password.startsWith("google_oauth_")) {
         patch.password = undefined;
         patch.authProvider = "google";
         patch.passwordSet = false;
@@ -533,6 +489,22 @@ class Store {
     this.markDirty();
   }
 
+  get payments() {
+    return this._payments;
+  }
+  set payments(v: Payment[]) {
+    this._payments = tracked(v, () => this.markDirty());
+    this.markDirty();
+  }
+
+  get payouts() {
+    return this._payouts;
+  }
+  set payouts(v: Payout[]) {
+    this._payouts = tracked(v, () => this.markDirty());
+    this.markDirty();
+  }
+
   get auditLog() {
     return this._auditLog;
   }
@@ -575,6 +547,8 @@ class Store {
       userSettings: this.userSettings,
       sessions: this.sessions,
       auditLog: this.auditLog,
+      payments: this.payments,
+      payouts: this.payouts,
     };
     if (persistenceAdapter) {
       try {

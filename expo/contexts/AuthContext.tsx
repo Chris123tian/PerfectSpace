@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { User, UserRole } from '@/types/property';
 import { trpc } from '@/lib/trpc';
-import { isUnauthorizedError, onUnauthorized, setSessionToken } from '@/lib/session';
+import { Platform } from 'react-native';
+import { getSessionToken, isUnauthorizedError, onUnauthorized, setSessionToken } from '@/lib/session';
 
 const SESSION_KEY = 'ps_session_v2';
 const LEGACY_USER_KEY = 'ps_current_user';
@@ -20,13 +21,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const userRef = useRef<User | null>(null);
   userRef.current = user;
 
+  // Always pair the profile with the token this tab is actually using — never
+  // a token read back from storage, which another tab/login may have replaced.
   const persist = useCallback((next: User, token?: string) => {
     setUser(next);
-    void AsyncStorage.getItem(SESSION_KEY).then((raw) => {
-      const prevToken = raw ? (JSON.parse(raw) as StoredSession).token : null;
-      const t = token ?? prevToken;
-      if (t) void AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ user: next, token: t }));
-    });
+    const t = token ?? getSessionToken();
+    if (t) void AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ user: next, token: t }));
   }, []);
 
   const clearSession = useCallback(async () => {
@@ -75,6 +75,35 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return () => { cancelled = true; };
   }, [utils, persist, clearSession]);
 
+  // Web: signing in/out in another tab replaces the shared session. Follow it,
+  // so this tab never shows one account while sending another's token.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== SESSION_KEY) return;
+      if (!e.newValue) {
+        setSessionToken(null);
+        setUser(null);
+        queryClient.clear();
+        return;
+      }
+      try {
+        const next = JSON.parse(e.newValue) as StoredSession;
+        if (next.token !== getSessionToken()) {
+          setSessionToken(next.token);
+          setUser(next.user);
+          void queryClient.invalidateQueries();
+        } else {
+          setUser(next.user);
+        }
+      } catch {
+        // ignore malformed values
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [queryClient]);
+
   // Any request rejected for a dead session signs the user out locally.
   useEffect(() => onUnauthorized(() => {
     console.log('[Auth] Session rejected by server — signing out');
@@ -93,6 +122,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   });
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
   const changePasswordMutation = trpc.auth.changePassword.useMutation();
+  const resetPasswordMutation = trpc.auth.resetPassword.useMutation();
   const submitVerificationMutation = trpc.auth.submitVerification.useMutation();
   const updateSettingsMutation = trpc.auth.updateSettings.useMutation({
     onSuccess: () => {
@@ -171,7 +201,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     await clearSession();
   }, [deleteAccountMutation, clearSession]);
 
-  const updateSettings = useCallback(async (settings: { pushEnabled?: boolean; emailEnabled?: boolean; darkMode?: boolean }) => {
+  const updateSettings = useCallback(async (settings: { pushEnabled?: boolean; emailEnabled?: boolean; smsEnabled?: boolean; darkMode?: boolean }) => {
     if (!userRef.current) throw new Error('Not authenticated');
     return updateSettingsMutation.mutateAsync({ settings });
   }, [updateSettingsMutation]);
@@ -183,13 +213,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return result;
   }, [changePasswordMutation, persist]);
 
-  const submitVerification = useCallback(async (doc: { documentType: string; documentName: string; documentNumber?: string; documentImage: string }) => {
+  const resetPassword = useCallback(async (params: { email: string; phone: string; newPassword: string }) => {
+    return resetPasswordMutation.mutateAsync(params);
+  }, [resetPasswordMutation]);
+
+  const submitVerification = useCallback(async (doc: { documentType: string; documentName: string; documentNumber?: string; documentImage?: string }) => {
     if (!userRef.current) throw new Error('Not authenticated');
+    // Confirm which account the server sees before submitting.
+    const me = (await utils.client.auth.me.query()) as User;
+    persist(me);
+    if (me.role !== 'landlord') {
+      throw new Error(`You're signed in as ${me.email} (${me.role}). Identity verification is for landlord accounts — sign in with your landlord account.`);
+    }
     const fresh = (await submitVerificationMutation.mutateAsync(doc)) as User;
     persist(fresh);
     void queryClient.invalidateQueries();
     return fresh;
-  }, [submitVerificationMutation, persist, queryClient]);
+  }, [submitVerificationMutation, persist, queryClient, utils]);
 
   const isStaff = user?.role === 'admin' || user?.role === 'superadmin';
 
@@ -222,6 +262,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     updateSettings,
     changePassword,
     changePasswordPending: changePasswordMutation.isPending,
+    resetPassword,
+    resetPasswordPending: resetPasswordMutation.isPending,
     submitVerification,
     submitVerificationPending: submitVerificationMutation.isPending,
   }), [
@@ -231,7 +273,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     googleAuth, googleAuthMutation.isPending, googleAuthMutation.error,
     logout, refreshUser, updateProfile, updateProfileMutation.isPending,
     getAllUsers, updateUserAdmin, deleteUser, deleteAccount, deleteAccountMutation.isPending, updateSettings,
-    changePassword, changePasswordMutation.isPending,
+    changePassword, changePasswordMutation.isPending, resetPassword, resetPasswordMutation.isPending,
     submitVerification, submitVerificationMutation.isPending,
   ]);
 });

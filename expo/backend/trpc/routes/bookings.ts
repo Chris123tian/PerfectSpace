@@ -3,6 +3,7 @@ import { createTRPCRouter, isStaff, protectedProcedure } from "../create-context
 import { store } from "../../store";
 import { audit, fail } from "../helpers";
 import type { Booking } from "../../../types/property";
+import { notifyUser } from "../../notify";
 
 export const bookingsRouter = createTRPCRouter({
   /** Your bookings as renter or owner; staff see all. */
@@ -47,14 +48,10 @@ export const bookingsRouter = createTRPCRouter({
         createdAt: new Date().toISOString(),
       };
       store.bookings.unshift(booking);
-      store.notifications.unshift({
-        id: store.generateId("n"),
-        userId: booking.ownerId,
+      notifyUser(booking.ownerId, {
         title: "New Viewing Request",
-        message: `${booking.renterName} wants to view ${booking.propertyTitle} on ${booking.date}.`,
+        message: `${booking.renterName} wants to view ${booking.propertyTitle} on ${booking.date}${booking.time ? ` at ${booking.time}` : ""}.`,
         type: "booking",
-        read: false,
-        createdAt: new Date().toISOString(),
         data: { bookingId: booking.id },
       });
       audit(ctx, "booking.create", { targetType: "booking", targetId: booking.id, detail: property.title });
@@ -86,14 +83,10 @@ export const bookingsRouter = createTRPCRouter({
       store.bookings[idx] = { ...booking, status: input.status };
       const notifyIds = isOwner ? [booking.renterId] : isRenter ? [booking.ownerId] : [booking.renterId, booking.ownerId];
       for (const userId of notifyIds) {
-        store.notifications.unshift({
-          id: store.generateId("n"),
-          userId,
+        notifyUser(userId, {
           title: `Booking ${input.status.charAt(0).toUpperCase() + input.status.slice(1)}`,
-          message: `The viewing for ${booking.propertyTitle} has been ${input.status}.`,
+          message: `The viewing for ${booking.propertyTitle} on ${booking.date} has been ${input.status}.`,
           type: "booking",
-          read: false,
-          createdAt: new Date().toISOString(),
           data: { bookingId: input.id },
         });
       }
