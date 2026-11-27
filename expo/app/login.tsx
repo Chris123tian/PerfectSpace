@@ -55,18 +55,9 @@ export default function LoginScreen() {
 
   const handleGoogleResponse = useCallback(async (accessToken: string) => {
     try {
-      console.log('[Login] Fetching Google user info...');
-      const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const userInfo = await userInfoRes.json();
-      console.log('[Login] Google user info:', userInfo.email, userInfo.name);
-
-      await googleAuth({
-        email: userInfo.email,
-        name: userInfo.name ?? 'Google User',
-        avatar: userInfo.picture,
-      });
+      // The server verifies the token with Google itself — we never send a
+      // self-reported email, so nobody can sign in as someone else.
+      await googleAuth({ accessToken });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
     } catch (e: unknown) {
@@ -105,7 +96,6 @@ export default function LoginScreen() {
     if (!email.trim()) newErrors.email = 'Email is required';
     else if (!email.includes('@')) newErrors.email = 'Enter a valid email';
     if (!password) newErrors.password = 'Password is required';
-    else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -214,6 +204,7 @@ export default function LoginScreen() {
                   onChangeText={(t) => { setEmail(t); setErrors(e => ({ ...e, email: undefined })); }}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                   autoComplete="email"
                   testID="login-email"
                 />
@@ -231,6 +222,10 @@ export default function LoginScreen() {
                     onChangeText={(t) => { setPassword(t); setErrors(e => ({ ...e, password: undefined })); }}
                     secureTextEntry={!showPassword}
                     autoComplete="password"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    textContentType="password"
                     testID="login-password"
                   />
                   <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>

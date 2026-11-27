@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import {
   Settings, ChevronRight, Heart, Star, Shield, Bell, HelpCircle, LogOut,
-  Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck,
+  Home, BadgeCheck, FileText, Phone, Calendar, Plus, ShieldCheck, Lock,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -78,11 +78,11 @@ export default function ProfileScreen() {
     });
   }
 
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'superadmin') {
     commonMenuSections.push({
       title: 'Administration',
       items: [
-        { id: 'admin', icon: <ShieldCheck size={20} color={Colors.primary} />, label: 'Admin Dashboard', subtitle: 'Manage platform', action: () => router.push('/admin'), showArrow: true },
+        { id: 'admin', icon: <ShieldCheck size={20} color={Colors.primary} />, label: 'Admin Dashboard', subtitle: user.role === 'superadmin' ? 'Manage platform, users & audit' : 'Manage platform', action: () => router.push('/admin'), showArrow: true },
         { id: 'bookings', icon: <Calendar size={20} color={Colors.accent} />, label: 'All Bookings', action: () => router.push('/bookings'), showArrow: true },
       ],
     });
@@ -94,7 +94,7 @@ export default function ProfileScreen() {
       items: [
         { id: 'notifications', icon: <Bell size={20} color={Colors.categoryOffice} />, label: 'Notifications', subtitle: unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : undefined, action: () => router.push('/notifications'), showArrow: true, badge: unreadNotificationCount || undefined },
         { id: 'reviews', icon: <Star size={20} color={Colors.accent} />, label: 'My Reviews', subtitle: `${user.reviewsCount} reviews`, action: () => router.push('/my-reviews'), showArrow: true },
-        { id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : 'Not verified', action: () => showAlert('Verification Status', user.verified ? 'Your identity has been verified. You have a trusted badge on your profile.' : 'To get verified, ensure your profile is complete with a valid phone number and photo. Verification helps build trust with other users.'), showArrow: true },
+        ...(user.role === 'landlord' ? [{ id: 'verification', icon: <Shield size={20} color={Colors.success} />, label: 'Verification', subtitle: user.verified ? 'Verified' : user.verification?.status === 'pending' ? 'Under review' : 'Not verified', action: () => router.push('/edit-profile'), showArrow: true }] : []),
       ],
     },
     {
@@ -108,13 +108,14 @@ export default function ProfileScreen() {
       title: 'Support',
       items: [
         { id: 'help', icon: <HelpCircle size={20} color={Colors.textSecondary} />, label: 'Help Center', action: () => showAlert('Help', 'Contact us at support@perfectspace.com'), showArrow: true },
+        { id: 'privacy', icon: <Lock size={20} color={Colors.textSecondary} />, label: 'Privacy & Data', subtitle: 'What we collect and why', action: () => router.push('/privacy'), showArrow: true },
         { id: 'settings', icon: <Settings size={20} color={Colors.textSecondary} />, label: 'Settings', action: () => router.push('/settings'), showArrow: true },
       ],
     }
   );
 
-  const roleLabel = user.role === 'admin' ? 'Administrator' : user.role === 'landlord' ? 'Property Owner' : 'Renter';
-  const roleBadgeColor = user.role === 'admin' ? Colors.error : user.role === 'landlord' ? Colors.primary : Colors.categoryApartment;
+  const roleLabel = user.role === 'superadmin' ? 'Super Admin' : user.role === 'admin' ? 'Administrator' : user.role === 'landlord' ? 'Property Owner' : 'Renter';
+  const roleBadgeColor = user.role === 'admin' || user.role === 'superadmin' ? Colors.error : user.role === 'landlord' ? Colors.primary : Colors.categoryApartment;
 
   return (
     <View style={styles.container}>

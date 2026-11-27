@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, Calendar, Check, X as XIcon, Clock, MapPin, Video } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -41,7 +42,7 @@ export default function BookingsScreen() {
 
   const renderBooking = useCallback(({ item }: { item: Booking }) => {
     const isOwner = user?.role === 'landlord' && item.ownerId === user?.id;
-    const isAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
     return (
       <View style={styles.card}>
@@ -97,7 +98,7 @@ export default function BookingsScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back"><ArrowLeft size={22} color={Colors.text} /></Pressable>
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back"><ArrowLeft size={22} color={Colors.text} /></Pressable>
           <Text style={styles.headerTitle}>Bookings</Text>
           <View style={{ width: 40 }} />
         </View>

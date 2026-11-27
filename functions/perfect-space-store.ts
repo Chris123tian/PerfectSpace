@@ -14,15 +14,38 @@ import { DurableObject } from "cloudflare:workers";
 // @ts-expect-error — cross-folder import; resolved by the bundler.
 import app from "../expo/backend/hono";
 // @ts-expect-error — cross-folder import; resolved by the bundler.
-import { store, setPersistenceAdapter, type PersistedData } from "../expo/backend/store";
+import {
+  configureBootstrapCredentials,
+  store,
+  setPersistenceAdapter,
+  type PersistedData,
+  type StoredBlob,
+} from "../expo/backend/store";
 
 type StateRow = { key: string; value: string };
+type Env = {
+  PS_BOOTSTRAP_ADMIN_PASSWORD?: string;
+  PS_BOOTSTRAP_SUPERADMIN_PASSWORD?: string;
+};
+type BlobRow = {
+  id: string;
+  mime: string;
+  data: ArrayBuffer;
+  owner_id: string;
+  is_private: number;
+  access_key: string | null;
+  created_at: string;
+};
 
 export class PerfectSpaceStore extends DurableObject {
   private ready: Promise<void>;
 
-  constructor(ctx: DurableObjectState, env: unknown) {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    configureBootstrapCredentials({
+      adminPassword: env.PS_BOOTSTRAP_ADMIN_PASSWORD,
+      superAdminPassword: env.PS_BOOTSTRAP_SUPERADMIN_PASSWORD,
+    });
 
     // Load persisted state and install the SQLite adapter BEFORE serving any
     // request, so even the first call sees durable data instead of seeds.
@@ -31,6 +54,19 @@ export class PerfectSpaceStore extends DurableObject {
         CREATE TABLE IF NOT EXISTS state (
           key   TEXT PRIMARY KEY,
           value TEXT NOT NULL
+        )
+      `);
+      // Uploaded photos/documents live as binary rows (kept out of the JSON
+      // snapshot, which is limited to ~2 MB per row).
+      ctx.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS blobs (
+          id         TEXT PRIMARY KEY,
+          mime       TEXT NOT NULL,
+          data       BLOB NOT NULL,
+          owner_id   TEXT NOT NULL,
+          is_private INTEGER NOT NULL DEFAULT 0,
+          access_key TEXT,
+          created_at TEXT NOT NULL
         )
       `);
 
@@ -66,6 +102,8 @@ export class PerfectSpaceStore extends DurableObject {
             ["reviews", data.reviews],
             ["savedProperties", data.savedProperties],
             ["userSettings", data.userSettings],
+            ["sessions", data.sessions],
+            ["auditLog", data.auditLog],
           ];
           for (const [key, value] of entries) {
             ctx.storage.sql.exec(
@@ -75,6 +113,37 @@ export class PerfectSpaceStore extends DurableObject {
               JSON.stringify(value)
             );
           }
+        },
+        putBlob(blob: StoredBlob) {
+          ctx.storage.sql.exec(
+            `INSERT OR REPLACE INTO blobs (id, mime, data, owner_id, is_private, access_key, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            blob.id,
+            blob.mime,
+            blob.data.buffer.slice(blob.data.byteOffset, blob.data.byteOffset + blob.data.byteLength),
+            blob.ownerId,
+            blob.isPrivate ? 1 : 0,
+            blob.accessKey ?? null,
+            blob.createdAt
+          );
+        },
+        getBlob(id: string): StoredBlob | null {
+          const row = ctx.storage.sql
+            .exec<BlobRow>("SELECT * FROM blobs WHERE id = ?", id)
+            .toArray()[0];
+          if (!row) return null;
+          return {
+            id: row.id,
+            mime: row.mime,
+            data: new Uint8Array(row.data),
+            ownerId: row.owner_id,
+            isPrivate: !!row.is_private,
+            accessKey: row.access_key ?? undefined,
+            createdAt: row.created_at,
+          };
+        },
+        deleteBlob(id: string) {
+          ctx.storage.sql.exec("DELETE FROM blobs WHERE id = ?", id);
         },
       });
     });

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import {
   X,
   Building2,
@@ -18,12 +19,15 @@ import {
   DoorOpen,
   Check,
   ConciergeBell,
+  MapPin,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { PropertyType, ListingType } from '@/types/property';
 import { countryOptions, findCountry } from '@/lib/countries';
 import { useFilters } from '@/contexts/FilterContext';
+import { useData } from '@/contexts/DataContext';
+import { regionOptions, townOptions } from '@/lib/regions';
 
 const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }[] = [
   { key: 'apartment', label: 'Apartment', icon: <Building2 size={20} color={Colors.categoryApartment} /> },
@@ -44,6 +48,19 @@ export default function FiltersScreen() {
   const [currency, setCurrency] = useState<string | null>(filters.currency);
   const [minPrice, setMinPrice] = useState<string>(filters.minPrice !== null ? String(filters.minPrice) : '');
   const [maxPrice, setMaxPrice] = useState<string>(filters.maxPrice !== null ? String(filters.maxPrice) : '');
+  const [region, setRegion] = useState<string | null>(filters.region);
+  const [town, setTown] = useState<string>(filters.town ?? '');
+  const [showAllRegions, setShowAllRegions] = useState<boolean>(false);
+  const { activeProperties } = useData();
+
+  const regions = useMemo(() => regionOptions(selectedCountry, activeProperties), [selectedCountry, activeProperties]);
+  const towns = useMemo(() => townOptions(selectedCountry, region, activeProperties), [selectedCountry, region, activeProperties]);
+  const townQuery = town.trim().toLowerCase();
+  const townSuggestions = useMemo(
+    () => towns.filter(t => !townQuery || t.toLowerCase().includes(townQuery)).slice(0, 18),
+    [towns, townQuery]
+  );
+  const visibleRegions = showAllRegions ? regions : regions.slice(0, 12);
 
   const handleToggleType = useCallback((type: PropertyType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -54,19 +71,25 @@ export default function FiltersScreen() {
     );
   }, []);
 
+  // Opened directly (page refresh / shared link) there is no screen to go back
+  // to, so goBack lands on Home where the filtered results are shown.
+  const close = useCallback(() => goBack('/'), []);
+
   const handleApply = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     applyFilters({
       listingType,
       types: selectedTypes,
       country: selectedCountry,
+      region,
+      town: town.trim() || null,
       minPrice: minPrice.trim() ? Number(minPrice) : null,
       maxPrice: maxPrice.trim() ? Number(maxPrice) : null,
       currency,
       bedrooms: selectedBedrooms,
     });
-    router.back();
-  }, [applyFilters, listingType, selectedTypes, selectedCountry, minPrice, maxPrice, currency, selectedBedrooms]);
+    close();
+  }, [close, applyFilters, listingType, selectedTypes, selectedCountry, region, town, minPrice, maxPrice, currency, selectedBedrooms]);
 
   const handleReset = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -74,6 +97,8 @@ export default function FiltersScreen() {
     setListingType(null);
     setSelectedBedrooms(null);
     setSelectedCountry(null);
+    setRegion(null);
+    setTown('');
     setCurrency(null);
     setMinPrice('');
     setMaxPrice('');
@@ -86,7 +111,7 @@ export default function FiltersScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable style={styles.closeButton} onPress={() => router.back()} testID="close-filters">
+          <Pressable style={styles.closeButton} onPress={close} testID="close-filters">
             <X size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Filters</Text>
@@ -170,6 +195,8 @@ export default function FiltersScreen() {
                   setSelectedCountry(prev => {
                     const next = prev === c.name ? null : c.name;
                     setCurrency(next ? c.currency : null);
+                    setRegion(null);
+                    setTown('');
                     return next;
                   });
                 }}
@@ -181,6 +208,80 @@ export default function FiltersScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Region / State</Text>
+          <Text style={styles.sectionHint}>
+            {selectedCountry ? `Regions in ${selectedCountry}` : 'Regions with listings — pick a country to see them all'}
+          </Text>
+          {regions.length === 0 ? (
+            <Text style={styles.emptyHint}>No regions yet for this selection.</Text>
+          ) : (
+            <View style={styles.cityGrid}>
+              {visibleRegions.map((r) => (
+                <Pressable
+                  key={r}
+                  style={[styles.cityChip, region === r && styles.cityChipActive]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setRegion(prev => (prev === r ? null : r));
+                    setTown('');
+                  }}
+                  testID={`filter-region-${r.replace(/\s+/g, '-')}`}
+                >
+                  <Text style={[styles.cityChipText, region === r && styles.cityChipTextActive]}>{r}</Text>
+                </Pressable>
+              ))}
+              {regions.length > 12 && (
+                <Pressable style={styles.moreChip} onPress={() => setShowAllRegions(v => !v)} testID="filter-region-more">
+                  <Text style={styles.moreChipText}>{showAllRegions ? 'Show less' : `+${regions.length - 12} more`}</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Town / City / Area</Text>
+          <Text style={styles.sectionHint}>Type a town or neighbourhood, or tap a suggestion</Text>
+          <View style={styles.townInputWrap}>
+            <MapPin size={16} color={Colors.textLight} />
+            <TextInput
+              style={styles.townInput}
+              placeholder="e.g. East Legon, Kumasi, Brooklyn"
+              placeholderTextColor={Colors.textLight}
+              value={town}
+              onChangeText={setTown}
+              autoCorrect={false}
+              testID="filter-town-input"
+            />
+            {town ? (
+              <Pressable onPress={() => setTown('')} hitSlop={8} testID="filter-town-clear">
+                <X size={16} color={Colors.textLight} />
+              </Pressable>
+            ) : null}
+          </View>
+          {townSuggestions.length > 0 && (
+            <View style={[styles.cityGrid, { marginTop: 10 }]}>
+              {townSuggestions.map((t) => {
+                const active = town.trim().toLowerCase() === t.toLowerCase();
+                return (
+                  <Pressable
+                    key={t}
+                    style={[styles.cityChip, active && styles.cityChipActive]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setTown(active ? '' : t);
+                    }}
+                    testID={`filter-town-${t.replace(/\s+/g, '-')}`}
+                  >
+                    <Text style={[styles.cityChipText, active && styles.cityChipTextActive]}>{t}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -441,6 +542,38 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontStyle: 'italic' as const,
+  },
+  moreChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.primaryLight,
+  },
+  moreChipText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+  },
+  townInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  townInput: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontSize: 14,
+    color: Colors.text,
   },
   bottomBar: {
     backgroundColor: Colors.white,

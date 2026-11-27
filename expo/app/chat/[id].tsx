@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidin
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, Send, Home as HomeIcon } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -12,7 +13,7 @@ import { ChatMessage } from '@/types/property';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, isStaff } = useAuth();
   const { conversations, getConversationMessages, sendMessage, markConversationRead } = useData();
   const [text, setText] = useState<string>('');
   const flatListRef = useRef<FlatList>(null);
@@ -25,15 +26,21 @@ export default function ChatScreen() {
     if (id) markConversationRead(id);
   }, [id, markConversationRead, messages.length]);
 
+  // Staff answering a support chat speak for "Perfect Space Support": the member is participant 0.
+  const staffSupportView = !!conversation && conversation.propertyId === 'support' && isStaff;
+
   const otherParticipant = useMemo(() => {
     if (!conversation || !user) return { name: 'Unknown', avatar: '' };
+    if (staffSupportView) {
+      return { name: conversation.participantNames[0] ?? 'Member', avatar: conversation.participantAvatars[0] ?? '' };
+    }
     const idx = conversation.participantIds.indexOf(user.id);
     const otherIdx = idx === 0 ? 1 : 0;
     return {
       name: conversation.participantNames[otherIdx] ?? 'Unknown',
       avatar: conversation.participantAvatars[otherIdx] ?? '',
     };
-  }, [conversation, user]);
+  }, [conversation, user, staffSupportView]);
 
   const handleSend = useCallback(async () => {
     if (!text.trim() || !id) return;
@@ -54,7 +61,9 @@ export default function ChatScreen() {
   }, []);
 
   const renderMessage = useCallback(({ item }: { item: ChatMessage }) => {
-    const isMe = item.senderId === user?.id;
+    const isMe = staffSupportView && conversation
+      ? item.senderId !== conversation.participantIds[0]
+      : item.senderId === user?.id;
     return (
       <View style={[styles.messageBubbleRow, isMe ? styles.myRow : styles.otherRow]}>
         {!isMe && <SafeImage uri={otherParticipant.avatar} style={styles.messageAvatar} />}
@@ -64,14 +73,14 @@ export default function ChatScreen() {
         </View>
       </View>
     );
-  }, [user, otherParticipant, formatTime]);
+  }, [user, otherParticipant, formatTime, staffSupportView, conversation]);
 
   if (!conversation) {
     return (
       <View style={styles.container}>
         <SafeAreaView edges={['top']} style={styles.safeArea}>
           <View style={styles.chatHeader}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn}><ArrowLeft size={22} color={Colors.text} /></Pressable>
+            <Pressable onPress={() => goBack()} style={styles.backBtn}><ArrowLeft size={22} color={Colors.text} /></Pressable>
             <Text style={styles.headerName}>Conversation not found</Text>
             <View style={{ width: 40 }} />
           </View>
@@ -84,7 +93,7 @@ export default function ChatScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.chatHeader}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="chat-back">
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="chat-back">
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <View style={styles.headerCenter}>

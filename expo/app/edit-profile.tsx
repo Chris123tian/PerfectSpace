@@ -1,15 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { X, Camera, BadgeCheck, ShieldCheck, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { countryOptions } from '@/lib/countries';
+import { uploadImage } from '@/lib/upload';
 
 const documentTypes = ['Ghana Card', 'Passport', "Driver's License", 'National ID'];
 
@@ -28,6 +30,40 @@ export default function EditProfileScreen() {
   const [docName, setDocName] = useState<string>('');
   const [docNumber, setDocNumber] = useState<string>('');
   const [docImage, setDocImage] = useState<string>('');
+  const [avatarUploading, setAvatarUploading] = useState<boolean>(false);
+  const [docUploading, setDocUploading] = useState<boolean>(false);
+
+  // After a page refresh (or deep link) the session restores after the first
+  // render, so fill the form once the user arrives instead of leaving it blank.
+  const hydratedFor = useRef<string | null>(user?.id ?? null);
+  useEffect(() => {
+    if (!user || hydratedFor.current === user.id) return;
+    hydratedFor.current = user.id;
+    setName(user.name ?? '');
+    setPhone(user.phone ?? '');
+    setBio(user.bio ?? '');
+    setDob(user.dob ?? '');
+    setCountry(user.country ?? 'Ghana');
+    setRegion(user.region ?? '');
+    setAvatarUri((prev) => prev || user.avatar || '');
+  }, [user]);
+
+  // Upload right away so the saved avatar is the exact photo the user picked,
+  // stored on the server (a device-local URI only exists on this phone/tab).
+  const uploadAvatar = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
+    const previous = avatarUri;
+    setAvatarUri(asset.uri);
+    setAvatarUploading(true);
+    try {
+      const url = await uploadImage(asset.uri, 'avatar', { width: asset.width, height: asset.height });
+      setAvatarUri(url);
+    } catch (e) {
+      setAvatarUri(previous);
+      showAlert('Upload failed', e instanceof Error ? e.message : 'Could not upload this photo.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [avatarUri]);
 
   const handleChangePhoto = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -46,8 +82,7 @@ export default function EditProfileScreen() {
           quality: 0.8,
         });
         if (!result.canceled && result.assets[0]) {
-          setAvatarUri(result.assets[0].uri);
-          console.log('[EditProfile] Photo selected from library');
+          await uploadAvatar(result.assets[0]);
         }
       } catch (e) {
         console.log('[EditProfile] Library error:', e);
@@ -67,8 +102,7 @@ export default function EditProfileScreen() {
           quality: 0.8,
         });
         if (!result.canceled && result.assets[0]) {
-          setAvatarUri(result.assets[0].uri);
-          console.log('[EditProfile] Photo taken');
+          await uploadAvatar(result.assets[0]);
         }
       } catch (e) {
         console.log('[EditProfile] Camera error:', e);
@@ -85,7 +119,7 @@ export default function EditProfileScreen() {
       { text: 'Photo Library', onPress: pickFromLibrary },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  }, []);
+  }, [uploadAvatar]);
 
   const handlePickDocImage = useCallback(async () => {
     try {
@@ -99,10 +133,18 @@ export default function EditProfileScreen() {
         quality: 0.7,
       });
       if (!result.canceled && result.assets[0]) {
-        setDocImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        setDocUploading(true);
+        try {
+          const url = await uploadImage(asset.uri, 'document', { width: asset.width, height: asset.height });
+          setDocImage(url);
+        } finally {
+          setDocUploading(false);
+        }
       }
     } catch (e) {
       console.log('[EditProfile] Doc image error:', e);
+      showAlert('Upload failed', e instanceof Error ? e.message : 'Could not upload the document photo.');
     }
   }, []);
 
@@ -111,30 +153,38 @@ export default function EditProfileScreen() {
       showAlert('Error', 'Enter the full name as printed on the document.');
       return;
     }
+    if (docUploading) {
+      showAlert('Please wait', 'Your document photo is still uploading.');
+      return;
+    }
+    if (!docImage) {
+      showAlert('Document photo needed', 'Attach a clear photo of your document so we can verify it.');
+      return;
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const updated = await submitVerification({
+      await submitVerification({
         documentType: docType,
         documentName: docName.trim(),
         documentNumber: docNumber.trim() || undefined,
-        documentImage: docImage || undefined,
+        documentImage: docImage,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowVerifyForm(false);
-      if (updated.verification?.status === 'approved') {
-        showAlert('Verified!', 'The name on your document matches your account — you are now verified.');
-      } else {
-        showAlert('Submitted', 'Your document is under review. Our team will verify it shortly.');
-      }
+      showAlert('Submitted', 'Your document is awaiting review by our team.');
     } catch (e) {
       console.log('[EditProfile] Verification error:', e);
-      showAlert('Error', 'Could not submit your document. Please try again.');
+      showAlert('Error', e instanceof Error ? e.message : 'Could not submit your document. Please try again.');
     }
-  }, [docType, docName, docNumber, docImage, submitVerification]);
+  }, [docType, docName, docNumber, docImage, docUploading, submitVerification]);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
       showAlert('Error', 'Name is required');
+      return;
+    }
+    if (avatarUploading) {
+      showAlert('Please wait', 'Your photo is still uploading.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -152,12 +202,12 @@ export default function EditProfileScreen() {
       }
       await updateProfile(updates);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showAlert('Success', 'Profile updated!', [{ text: 'OK', onPress: () => router.back() }]);
+      showAlert('Success', 'Profile updated!', [{ text: 'OK', onPress: () => goBack() }]);
     } catch (e) {
       console.log('[EditProfile] Error:', e);
-      showAlert('Error', 'Failed to update profile');
+      showAlert('Error', e instanceof Error ? e.message : 'Failed to update profile');
     }
-  }, [name, phone, bio, dob, country, region, avatarUri, user?.avatar, updateProfile]);
+  }, [name, phone, bio, dob, country, region, avatarUri, avatarUploading, user?.avatar, updateProfile]);
 
   if (!user) return null;
 
@@ -165,7 +215,7 @@ export default function EditProfileScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable style={styles.closeBtn} onPress={() => router.back()} testID="close">
+          <Pressable style={styles.closeBtn} onPress={() => goBack()} testID="close">
             <X size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -175,10 +225,17 @@ export default function EditProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.avatarSection}>
-          <SafeImage uri={avatarUri} style={styles.avatar} />
-          <Pressable style={styles.changePhotoBtn} onPress={handleChangePhoto} testID="change-photo">
+          <View>
+            <SafeImage uri={avatarUri} style={styles.avatar} />
+            {avatarUploading && (
+              <View style={styles.avatarUploading}>
+                <ActivityIndicator color={Colors.white} />
+              </View>
+            )}
+          </View>
+          <Pressable style={styles.changePhotoBtn} onPress={handleChangePhoto} disabled={avatarUploading} testID="change-photo">
             <Camera size={16} color={Colors.primary} />
-            <Text style={styles.changePhotoText}>Change Photo</Text>
+            <Text style={styles.changePhotoText}>{avatarUploading ? 'Uploading…' : 'Change Photo'}</Text>
           </Pressable>
         </View>
 
@@ -248,7 +305,7 @@ export default function EditProfileScreen() {
           <Text style={styles.infoTitle}>Account Info</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Role</Text>
-            <Text style={styles.infoValue}>{user.role === 'landlord' ? 'Property Owner' : user.role === 'admin' ? 'Administrator' : 'Renter'}</Text>
+            <Text style={styles.infoValue}>{user.role === 'landlord' ? 'Property Owner' : user.role === 'superadmin' ? 'Super Admin' : user.role === 'admin' ? 'Administrator' : 'Renter'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Member Since</Text>
@@ -260,6 +317,7 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
+        {user.role === 'landlord' && (
         <View style={styles.infoCard}>
           <View style={styles.verifyHeaderRow}>
             <BadgeCheck size={20} color={user.verified ? Colors.success : Colors.textLight} />
@@ -314,13 +372,19 @@ export default function EditProfileScreen() {
                   </View>
                   <Text style={styles.inputLabel}>Full name on document</Text>
                   <TextInput style={styles.input} value={docName} onChangeText={setDocName} placeholder="Exactly as printed" placeholderTextColor={Colors.textLight} testID="doc-name" />
-                  <Text style={styles.verifyHintSmall}>If this matches your account name, verification is instant.</Text>
+                  <Text style={styles.verifyHintSmall}>Your identity document will be reviewed by our team before your account is verified.</Text>
                   <Text style={styles.inputLabel}>Document number (optional)</Text>
                   <TextInput style={styles.input} value={docNumber} onChangeText={setDocNumber} placeholder="e.g. GHA-123456789-0" placeholderTextColor={Colors.textLight} testID="doc-number" />
-                  <Pressable style={styles.docImageBtn} onPress={handlePickDocImage} testID="doc-image">
-                    <Camera size={16} color={Colors.primary} />
-                    <Text style={styles.docImageText}>{docImage ? 'Photo attached — tap to change' : 'Attach a photo of the document'}</Text>
+                  <Pressable style={styles.docImageBtn} onPress={handlePickDocImage} disabled={docUploading} testID="doc-image">
+                    {docUploading ? <ActivityIndicator size="small" color={Colors.primary} /> : <Camera size={16} color={Colors.primary} />}
+                    <Text style={styles.docImageText}>
+                      {docUploading ? 'Uploading document…' : docImage ? 'Photo attached — tap to change' : 'Attach a photo of the document'}
+                    </Text>
                   </Pressable>
+                  {docImage && !docUploading ? (
+                    <SafeImage uri={docImage} style={styles.docPreview} contentFit="cover" />
+                  ) : null}
+                  <Text style={styles.verifyHintSmall}>Your document is stored privately and only visible to Perfect Space admins.</Text>
                   <Pressable style={[styles.verifyBtn, submitVerificationPending && styles.saveBtnDisabled]} onPress={handleSubmitVerification} disabled={submitVerificationPending} testID="submit-verification">
                     {submitVerificationPending ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.verifyBtnText}>Submit for Verification</Text>}
                   </Pressable>
@@ -329,6 +393,7 @@ export default function EditProfileScreen() {
             </View>
           )}
         </View>
+        )}
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
@@ -343,6 +408,8 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   safeArea: { backgroundColor: Colors.white },
+  avatarUploading: { ...StyleSheet.absoluteFillObject, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  docPreview: { width: '100%', height: 160, borderRadius: 12, marginTop: 10 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },

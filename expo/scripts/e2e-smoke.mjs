@@ -123,6 +123,7 @@ const runFlow = async (name, fn) => {
 };
 
 const SEEDED = "Modern Downtown Apartment";
+const BOOTSTRAP_ADMIN_PASSWORD = process.env.PS_BOOTSTRAP_ADMIN_PASSWORD;
 
 // ---- Flow 0: Seeded listings visible without auth ----
 await runFlow("Seeded listings visible on home", async (p) => {
@@ -131,15 +132,20 @@ await runFlow("Seeded listings visible on home", async (p) => {
   check("Seeded listings visible on home", true);
 });
 
-// ---- Flow 1: Admin sign-in sees listings ----
-await runFlow("Admin sign-in shows seeded listing", async (p) => {
-  await p.goto(`${APP_URL}/login`, { waitUntil: "networkidle", timeout: 60000 });
-  await p.getByTestId("login-email").fill("admin@perfectspace.com", { timeout: 20000 });
-  await p.getByTestId("login-password").fill("admin123");
-  await p.getByTestId("login-submit").click();
-  await p.getByText(SEEDED, { exact: false }).first().waitFor({ timeout: 25000 });
-  check("Admin sign-in shows seeded listing", true);
-});
+// ---- Flow 1: Staff sign-in uses a deployment-provided test secret ----
+if (BOOTSTRAP_ADMIN_PASSWORD) {
+  await runFlow("Staff sign-in shows seeded listing", async (p) => {
+    await p.goto(`${APP_URL}/portal`, { waitUntil: "networkidle", timeout: 60000 });
+    await p.getByTestId("portal-email").fill("admin@perfectspace.com", { timeout: 20000 });
+    await p.getByTestId("portal-password").fill(BOOTSTRAP_ADMIN_PASSWORD);
+    await p.getByTestId("portal-submit").click();
+    await p.getByTestId("admin-tab-overview").waitFor({ timeout: 25000 });
+    await p.getByText(SEEDED, { exact: false }).first().waitFor({ timeout: 25000 });
+    check("Staff sign-in shows seeded listing", true);
+  });
+} else {
+  console.log("Skipping staff sign-in; set PS_BOOTSTRAP_ADMIN_PASSWORD to enable it.");
+}
 
 // ---- Flow 2: Forgot password screen ----
 await runFlow("Forgot password screen opens", async (p) => {

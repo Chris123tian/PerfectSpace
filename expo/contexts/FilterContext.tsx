@@ -6,6 +6,10 @@ export interface SearchFilters {
   listingType: ListingType | null;
   types: PropertyType[];
   country: string | null;
+  /** State / region / province. */
+  region: string | null;
+  /** Town, city or neighbourhood. */
+  town: string | null;
   minPrice: number | null;
   maxPrice: number | null;
   currency: string | null;
@@ -16,6 +20,8 @@ export const emptyFilters: SearchFilters = {
   listingType: null,
   types: [],
   country: null,
+  region: null,
+  town: null,
   minPrice: null,
   maxPrice: null,
   currency: null,
@@ -38,6 +44,8 @@ export const [FilterProvider, useFilters] = createContextHook(() => {
       !!filters.listingType ||
       filters.types.length > 0 ||
       !!filters.country ||
+      !!filters.region ||
+      !!filters.town ||
       filters.minPrice !== null ||
       filters.maxPrice !== null ||
       filters.bedrooms !== null,

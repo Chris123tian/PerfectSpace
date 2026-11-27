@@ -15,7 +15,8 @@ export interface UserVerification {
   rejectionReason?: string;
 }
 export type ListingType = 'rent' | 'sale';
-export type UserRole = 'renter' | 'landlord' | 'admin';
+export type UserRole = 'renter' | 'landlord' | 'admin' | 'superadmin';
+export type AuthProvider = 'password' | 'google';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
 export type PropertyStatus = 'active' | 'pending' | 'rejected' | 'archived';
 
@@ -43,7 +44,12 @@ export interface Property {
   bathrooms: number;
   area: number;
   address: string;
+  /** Town or city. */
   city: string;
+  /** State / region / province inside the country. */
+  region?: string;
+  /** Neighbourhood or suburb within the town. */
+  neighborhood?: string;
   latitude: number;
   longitude: number;
   images: string[];
@@ -64,6 +70,7 @@ export interface PropertyFilter {
   minPrice?: number;
   maxPrice?: number;
   city?: string;
+  region?: string;
   bedrooms?: number;
   searchQuery?: string;
 }
@@ -132,6 +139,46 @@ export interface User {
   region?: string;
   whatsapp?: string;
   verification?: UserVerification;
+  /** How the account signs in. Google accounts may not have a password yet. */
+  authProvider?: AuthProvider;
+  /** False for Google accounts that never set a password. */
+  passwordSet?: boolean;
+  createdAt?: string;
+}
+
+export type SessionPortal = 'app' | 'admin';
+
+export interface Session {
+  id: string;
+  /** SHA-256 of the bearer token — the raw token is never stored. */
+  tokenHash: string;
+  userId: string;
+  portal: SessionPortal;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  loggedOutAt?: string;
+  /** Why the session ended: logout, expired, revoked (password change / admin). */
+  endReason?: 'logout' | 'revoked' | 'expired';
+  ip?: string;
+  userAgent?: string;
+}
+
+/** Session as shown to the super admin (no token hash). */
+export type SessionView = Omit<Session, 'tokenHash'>;
+
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actorId: string | null;
+  actorEmail?: string;
+  actorRole?: UserRole;
+  action: string;
+  targetType?: 'user' | 'property' | 'booking' | 'notification' | 'conversation' | 'session' | 'review';
+  targetId?: string;
+  detail?: string;
+  ip?: string;
+  success: boolean;
 }
 
 export interface Booking {
@@ -158,7 +205,7 @@ export interface AppNotification {
   userId: string;
   title: string;
   message: string;
-  type: 'booking' | 'message' | 'review' | 'system' | 'property';
+  type: 'booking' | 'message' | 'review' | 'system' | 'property' | 'verification' | 'support';
   read: boolean;
   createdAt: string;
   data?: Record<string, string>;

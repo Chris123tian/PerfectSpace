@@ -48,9 +48,11 @@ export const FALLBACK_AVATARS: Record<string, string> = {
 export function isTransientUri(uri?: string | null): boolean {
   if (!uri) return true;
   const str = uri.trim().toLowerCase();
-  // blob: URIs are transient in web browsers; ph: is an old iOS asset format
-  // file:// URIs from expo-image-picker are valid local file references — do NOT block them
-  return str.startsWith('blob:') || str.startsWith('ph://');
+  // ph: is an old iOS asset format that expo-image can't render.
+  // blob:/file:// URIs are the photo the user just picked: show them as-is
+  // while they upload (swapping in a stock photo here was the "wrong picture"
+  // bug). Saved records only ever contain uploaded https URLs.
+  return str.startsWith('ph://');
 }
 
 export function isValidUrl(url?: string | null): boolean {
@@ -58,7 +60,7 @@ export function isValidUrl(url?: string | null): boolean {
   const str = url.trim();
   if (str.length === 0) return false;
   if (str.startsWith('data:image')) return true;
-  if (str.startsWith('file://')) return true; // ImagePicker native URIs
+  if (str.startsWith('file://') || str.startsWith('blob:') || str.startsWith('content://')) return true; // freshly picked photos
   if (isTransientUri(str)) return false;
   return str.startsWith('http://') || str.startsWith('https://');
 }

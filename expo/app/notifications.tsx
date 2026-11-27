@@ -2,7 +2,9 @@ import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, Calendar, MessageCircle, Star, Shield, CheckCheck } from 'lucide-react-native';
+import { goBack } from '@/lib/nav';
+import { ArrowLeft, Bell, Calendar, MessageCircle, Star, Shield, CheckCheck, X, Trash2, BadgeCheck } from 'lucide-react-native';
+import { showAlert } from '@/lib/alert';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/contexts/DataContext';
@@ -14,10 +16,37 @@ const typeIcons: Record<string, React.ReactNode> = {
   review: <Star size={20} color={Colors.warning} />,
   system: <Shield size={20} color={Colors.categoryOffice} />,
   property: <Bell size={20} color={Colors.success} />,
+  verification: <BadgeCheck size={20} color={Colors.primary} />,
 };
 
 export default function NotificationsScreen() {
-  const { notifications, markNotificationRead, markAllNotificationsRead } = useData();
+  const { notifications, markNotificationRead, markAllNotificationsRead, deleteNotification, clearNotifications } = useData();
+
+  const handleDelete = useCallback(async (id: string) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await deleteNotification(id);
+    } catch (e) {
+      showAlert('Error', e instanceof Error ? e.message : 'Could not delete notification.');
+    }
+  }, [deleteNotification]);
+
+  const handleClearAll = useCallback(() => {
+    showAlert('Clear all notifications?', 'This permanently deletes every notification in this list.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear all', style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearNotifications();
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e) {
+            showAlert('Error', e instanceof Error ? e.message : 'Could not clear notifications.');
+          }
+        },
+      },
+    ]);
+  }, [clearNotifications]);
 
   const formatTime = useCallback((timestamp: string) => {
     const date = new Date(timestamp);
@@ -34,13 +63,15 @@ export default function NotificationsScreen() {
   }, []);
 
   const handlePress = useCallback((notif: AppNotification) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!notif.read) markNotificationRead(notif.id);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!notif.read) void markNotificationRead(notif.id);
 
     if (notif.type === 'booking' && notif.data?.bookingId) {
       router.push('/bookings');
     } else if (notif.type === 'message' && notif.data?.conversationId) {
       router.push(`/chat/${notif.data.conversationId}`);
+    } else if (notif.type === 'verification' && notif.userId === 'admins') {
+      router.push('/admin');
     } else if (notif.data?.propertyId) {
       router.push(`/property/${notif.data.propertyId}`);
     }
@@ -60,9 +91,14 @@ export default function NotificationsScreen() {
         <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
         <Text style={styles.cardTime}>{formatTime(item.createdAt)}</Text>
       </View>
-      {!item.read && <View style={styles.unreadDot} />}
+      <View style={styles.cardSide}>
+        {!item.read && <View style={styles.unreadDot} />}
+        <Pressable onPress={() => void handleDelete(item.id)} hitSlop={10} style={styles.deleteBtn} testID={`delete-notif-${item.id}`}>
+          <X size={16} color={Colors.textLight} />
+        </Pressable>
+      </View>
     </Pressable>
-  ), [handlePress, formatTime]);
+  ), [handlePress, formatTime, handleDelete]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -70,17 +106,22 @@ export default function NotificationsScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back">
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back">
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Notifications</Text>
-          {unreadCount > 0 ? (
-            <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); markAllNotificationsRead(); }} style={styles.markAllBtn} testID="mark-all-read">
-              <CheckCheck size={20} color={Colors.primary} />
-            </Pressable>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
+          <View style={styles.headerActions}>
+            {unreadCount > 0 && (
+              <Pressable onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); void markAllNotificationsRead(); }} style={styles.markAllBtn} testID="mark-all-read">
+                <CheckCheck size={20} color={Colors.primary} />
+              </Pressable>
+            )}
+            {notifications.length > 0 ? (
+              <Pressable onPress={handleClearAll} style={[styles.markAllBtn, styles.clearBtn]} testID="clear-notifications">
+                <Trash2 size={18} color={Colors.error} />
+              </Pressable>
+            ) : unreadCount === 0 ? <View style={{ width: 40 }} /> : null}
+          </View>
         </View>
       </SafeAreaView>
 
@@ -109,6 +150,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '700' as const, color: Colors.text },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  clearBtn: { backgroundColor: Colors.error + '15' },
+  cardSide: { alignItems: 'flex-end', justifyContent: 'space-between', alignSelf: 'stretch', gap: 8 },
+  deleteBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
   markAllBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingBottom: 30 },
   card: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: Colors.white, gap: 12, alignItems: 'flex-start' },

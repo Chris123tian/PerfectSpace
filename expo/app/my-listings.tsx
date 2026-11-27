@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, Plus, Edit3, Trash2, Eye, Star, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -86,7 +87,7 @@ export default function MyListingsScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back"><ArrowLeft size={22} color={Colors.text} /></Pressable>
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back"><ArrowLeft size={22} color={Colors.text} /></Pressable>
           <Text style={styles.headerTitle}>My Listings</Text>
           <Pressable onPress={() => router.push('/add-property')} style={styles.addBtn} testID="add-listing">
             <Plus size={22} color={Colors.white} />

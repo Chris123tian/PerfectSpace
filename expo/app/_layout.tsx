@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { emitUnauthorized, isUnauthorizedError } from "@/lib/session";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
@@ -30,12 +31,27 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="my-reviews" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="tenant-rights" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="portal" options={{ headerShown: false, animation: "fade" }} />
     </Stack>
   );
 }
 
 export default function RootLayout() {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        // A request rejected for an expired/revoked session signs out locally.
+        queryCache: new QueryCache({ onError: (e) => { if (isUnauthorizedError(e)) emitUnauthorized(); } }),
+        mutationCache: new MutationCache({ onError: (e) => { if (isUnauthorizedError(e)) emitUnauthorized(); } }),
+        defaultOptions: {
+          queries: {
+            retry: (count, e) => !isUnauthorizedError(e) && count < 2,
+          },
+        },
+      }),
+  );
 
   useEffect(() => {
     SplashScreen.hideAsync();

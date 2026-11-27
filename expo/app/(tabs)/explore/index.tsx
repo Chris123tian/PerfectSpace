@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, TextInput, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Map, List, MapPin, SlidersHorizontal } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -7,19 +7,25 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useData } from '@/contexts/DataContext';
 import PropertyCard from '@/components/PropertyCard';
+import { useFilters } from '@/contexts/FilterContext';
+import { applySearchFilters, matchesSearch } from '@/lib/applyFilters';
 
 export default function ExploreScreen() {
-  const { activeProperties } = useData();
+  const { activeProperties, refetchAll } = useData();
+  const { filters, hasActiveFilters } = useFilters();
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const filteredProperties = useMemo(() => {
-    if (!searchQuery.trim()) return activeProperties;
-    const q = searchQuery.toLowerCase();
-    return activeProperties.filter(
-      p => p.title.toLowerCase().includes(q) || p.city.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)
-    );
-  }, [searchQuery, activeProperties]);
+    const base = applySearchFilters(activeProperties, filters);
+    return searchQuery.trim() ? base.filter(p => matchesSearch(p, searchQuery)) : base;
+  }, [searchQuery, activeProperties, filters]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await refetchAll(); } finally { setRefreshing(false); }
+  }, [refetchAll]);
 
   const toggleView = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -71,8 +77,8 @@ export default function ExploreScreen() {
             <Pressable style={[styles.viewToggle, viewMode === 'map' && styles.viewToggleActive]} onPress={toggleView} testID="view-toggle">
               {viewMode === 'list' ? <Map size={20} color={Colors.textSecondary} /> : <List size={20} color={Colors.white} />}
             </Pressable>
-            <Pressable style={styles.filterBtn} onPress={() => router.push('/filters')} testID="explore-filter">
-              <SlidersHorizontal size={20} color={Colors.primary} />
+            <Pressable style={[styles.filterBtn, hasActiveFilters && styles.viewToggleActive]} onPress={() => router.push('/filters')} testID="explore-filter">
+              <SlidersHorizontal size={20} color={hasActiveFilters ? Colors.white : Colors.primary} />
             </Pressable>
           </View>
         </View>
@@ -84,6 +90,7 @@ export default function ExploreScreen() {
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
           ListHeaderComponent={<Text style={styles.resultCount}>{filteredProperties.length} properties found</Text>}
           renderItem={({ item }) => <PropertyCard property={item} />}
           ListEmptyComponent={

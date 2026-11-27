@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { router } from 'expo-router';
-import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell, Mail, MessageCircle, CalendarClock, ShieldCheck } from 'lucide-react-native';
+import { goBack } from '@/lib/nav';
+import { X, Building2, Hotel, DoorOpen, ImagePlus, Trash2, ConciergeBell, Mail, MessageCircle, CalendarClock, ShieldCheck, RotateCw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
@@ -12,6 +13,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { PropertyType, ListingType, Property, RentalDurationUnit, BookingChannel } from '@/types/property';
 import { findCountry } from '@/lib/countries';
+import { uploadImage, isHostedImage } from '@/lib/upload';
+import { regionOptions } from '@/lib/regions';
+
+/** A photo in the form: shown from `preview`, saved as `url` once uploaded. */
+export interface PhotoSlot {
+  key: string;
+  preview: string;
+  url?: string;
+  width?: number;
+  height?: number;
+  status: 'uploading' | 'done' | 'error';
+}
 
 interface CurrencyOption {
   country: string;
@@ -49,32 +62,14 @@ const propertyTypes: { key: PropertyType; label: string; icon: React.ReactNode }
 ];
 
 const fallbackImages: Record<PropertyType, string[]> = {
-  apartment: [
-    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800',
-    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800',
-    'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800',
-  ],
-  office: [
-    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800',
-    'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800',
-    'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800',
-  ],
-  hostel: [
-    'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800',
-    'https://images.unsplash.com/photo-1596276020587-8044fe049813?w=800',
-    'https://images.unsplash.com/photo-1520277739336-7bf67edfa768?w=800',
-  ],
-  room: [
-    'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800',
-    'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800',
-    'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800',
-  ],
-  hotel: [
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800',
-    'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800',
-  ],
+  apartment: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800'],
+  office: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=800'],
+  hostel: ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800'],
+  room: ['https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800'],
+  hotel: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
 };
+
+const MAX_PHOTOS = 10;
 
 export default function AddPropertyScreen() {
   const { user } = useAuth();
@@ -90,15 +85,51 @@ export default function AddPropertyScreen() {
   const [area, setArea] = useState<string>('');
   const [address, setAddress] = useState<string>('');
   const [city, setCity] = useState<string>('');
+  const [region, setRegion] = useState<string>('');
+  const [neighborhood, setNeighborhood] = useState<string>('');
+  const { properties } = useData();
   const [amenities, setAmenities] = useState<string>('');
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption>(currencyOptions[0]);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
-  const [images, setImages] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<PhotoSlot[]>([]);
   const [durationUnit, setDurationUnit] = useState<RentalDurationUnit>('month');
   const [minNights, setMinNights] = useState<string>('');
   const [contactEmail, setContactEmail] = useState<string>('');
   const [contactWhatsApp, setContactWhatsApp] = useState<string>('');
   const [bookingChannel, setBookingChannel] = useState<BookingChannel>('in_app');
+
+  const regionChoices = useMemo(() => {
+    const country = findCountry(selectedCurrency.country)?.name;
+    return regionOptions(country, properties).slice(0, 40);
+  }, [selectedCurrency.country, properties]);
+
+  const uploadSlot = useCallback(async (slot: PhotoSlot) => {
+    try {
+      const url = await uploadImage(slot.preview, 'image', { width: slot.width, height: slot.height });
+      setPhotos(prev => prev.map(p => (p.key === slot.key ? { ...p, url, status: 'done' } : p)));
+    } catch (e) {
+      console.log('[AddProperty] Upload failed:', e);
+      setPhotos(prev => prev.map(p => (p.key === slot.key ? { ...p, status: 'error' } : p)));
+    }
+  }, []);
+
+  // Every picked photo uploads immediately, so what's saved is exactly what was picked.
+  const addAssets = useCallback((assets: ImagePicker.ImagePickerAsset[]) => {
+    const slots: PhotoSlot[] = assets.map((a, i) => ({
+      key: `${Date.now().toString(36)}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      preview: a.uri,
+      width: a.width,
+      height: a.height,
+      status: 'uploading',
+    }));
+    setPhotos(prev => [...prev, ...slots].slice(0, MAX_PHOTOS));
+    slots.forEach(s => void uploadSlot(s));
+  }, [uploadSlot]);
+
+  const retrySlot = useCallback((slot: PhotoSlot) => {
+    setPhotos(prev => prev.map(p => (p.key === slot.key ? { ...p, status: 'uploading' } : p)));
+    void uploadSlot(slot);
+  }, [uploadSlot]);
 
   const pickImage = useCallback(async () => {
     try {
@@ -111,21 +142,19 @@ export default function AddPropertyScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
-        quality: 0.8,
-        selectionLimit: 6 - images.length,
+        quality: 1,
+        selectionLimit: Math.max(1, MAX_PHOTOS - photos.length),
       });
 
       if (!result.canceled && result.assets.length > 0) {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const newUris = result.assets.map(a => a.uri);
-        setImages(prev => [...prev, ...newUris].slice(0, 6));
-        console.log('[AddProperty] Images picked:', newUris.length);
+        addAssets(result.assets);
       }
     } catch (e) {
       console.log('[AddProperty] Image pick error:', e);
       showAlert('Error', 'Failed to pick images. Please try again.');
     }
-  }, [images.length]);
+  }, [photos.length, addAssets]);
 
   const takePhoto = useCallback(async () => {
     try {
@@ -136,23 +165,22 @@ export default function AddPropertyScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        quality: 0.8,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets.length > 0) {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setImages(prev => [...prev, result.assets[0].uri].slice(0, 6));
-        console.log('[AddProperty] Photo taken');
+        addAssets([result.assets[0]]);
       }
     } catch (e) {
       console.log('[AddProperty] Camera error:', e);
       showAlert('Error', 'Failed to take photo. Please try again.');
     }
-  }, []);
+  }, [addAssets]);
 
-  const removeImage = useCallback((index: number) => {
+  const removeImage = useCallback((key: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setPhotos(prev => prev.filter(p => p.key !== key));
   }, []);
 
   const showImageOptions = useCallback(() => {
@@ -176,7 +204,17 @@ export default function AddPropertyScreen() {
       return;
     }
 
-    const finalImages = images.length >= 3 ? images : fallbackImages[type];
+    if (photos.some(p => p.status === 'uploading')) {
+      showAlert('Photos still uploading', 'Please wait a moment for your photos to finish uploading.');
+      return;
+    }
+    if (photos.some(p => p.status === 'error')) {
+      showAlert('Some photos failed', 'Tap a failed photo to retry, or remove it before listing.');
+      return;
+    }
+    const uploaded = photos.map(p => p.url).filter((u): u is string => isHostedImage(u));
+    // Stock photo only when the owner added none at all.
+    const finalImages = uploaded.length > 0 ? uploaded : fallbackImages[type];
     const isHotel = type === 'hotel';
     let period: string | undefined;
     let unit: RentalDurationUnit | undefined;
@@ -191,11 +229,6 @@ export default function AddPropertyScreen() {
         period = '/mo';
         unit = 'month';
       }
-    }
-
-    if (images.length > 0 && images.length < 3) {
-      showAlert('More Images Needed', 'Please add at least 3 images for your property, or remove all to use default images.');
-      return;
     }
 
     setLoading(true);
@@ -222,6 +255,8 @@ export default function AddPropertyScreen() {
         area: parseInt(area) || 0,
         address: address.trim(),
         city: city.trim(),
+        region: region.trim() || undefined,
+        neighborhood: neighborhood.trim() || undefined,
         latitude: 40.7128 + (Math.random() - 0.5) * 0.1,
         longitude: -74.006 + (Math.random() - 0.5) * 0.1,
         images: finalImages,
@@ -241,21 +276,21 @@ export default function AddPropertyScreen() {
       console.log('[AddProperty] Property added successfully');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert('Submitted for Review', 'Your property has been submitted and will appear on the platform once approved by an admin.', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => goBack() },
       ]);
     } catch (e) {
       console.log('[AddProperty] Error:', e);
-      showAlert('Error', 'Failed to add property. Please try again.');
+      showAlert('Error', e instanceof Error ? e.message : 'Failed to add property. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, amenities, images, addProperty, selectedCurrency, durationUnit, minNights, contactEmail, contactWhatsApp, bookingChannel]);
+  }, [user, title, description, type, listingType, price, bedrooms, bathrooms, area, address, city, region, neighborhood, amenities, photos, addProperty, selectedCurrency, durationUnit, minNights, contactEmail, contactWhatsApp, bookingChannel]);
 
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable style={styles.closeBtn} onPress={() => router.back()} testID="close-add">
+          <Pressable style={styles.closeBtn} onPress={() => goBack()} testID="close-add">
             <X size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Add Property</Text>
@@ -266,13 +301,25 @@ export default function AddPropertyScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Property Images</Text>
-          <Text style={styles.sectionHint}>Add at least 3 photos of your property (max 6)</Text>
+          <Text style={styles.sectionHint}>Add photos from your device (up to {MAX_PHOTOS}). The first one is the cover.</Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
-            {images.map((uri, index) => (
-              <View key={`img-${index}`} style={styles.imageThumb}>
-                <SafeImage uri={uri} style={styles.thumbImage} contentFit="cover" />
-                <Pressable style={styles.removeImageBtn} onPress={() => removeImage(index)} testID={`remove-img-${index}`}>
+            {photos.map((photo, index) => (
+              <View key={photo.key} style={styles.imageThumb} testID={`photo-${index}`}>
+                <SafeImage uri={photo.url ?? photo.preview} style={styles.thumbImage} contentFit="cover" />
+                {photo.status === 'uploading' && (
+                  <View style={styles.thumbOverlay} testID={`photo-uploading-${index}`}>
+                    <ActivityIndicator color={Colors.white} />
+                    <Text style={styles.thumbOverlayText}>Uploading</Text>
+                  </View>
+                )}
+                {photo.status === 'error' && (
+                  <Pressable style={[styles.thumbOverlay, styles.thumbError]} onPress={() => retrySlot(photo)} testID={`photo-retry-${index}`}>
+                    <RotateCw size={18} color={Colors.white} />
+                    <Text style={styles.thumbOverlayText}>Tap to retry</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.removeImageBtn} onPress={() => removeImage(photo.key)} testID={`remove-img-${index}`}>
                   <Trash2 size={14} color={Colors.white} />
                 </Pressable>
                 {index === 0 && (
@@ -282,7 +329,7 @@ export default function AddPropertyScreen() {
                 )}
               </View>
             ))}
-            {images.length < 6 && (
+            {photos.length < MAX_PHOTOS && (
               <Pressable style={styles.addImageBtn} onPress={showImageOptions} testID="add-image">
                 <ImagePlus size={28} color={Colors.primary} />
                 <Text style={styles.addImageText}>Add Photo</Text>
@@ -290,14 +337,9 @@ export default function AddPropertyScreen() {
             )}
           </ScrollView>
 
-          {images.length === 0 && (
+          {photos.length === 0 && (
             <View style={styles.defaultImagesNote}>
-              <Text style={styles.noteText}>No images added — default images for the selected property type will be used.</Text>
-            </View>
-          )}
-          {images.length > 0 && images.length < 3 && (
-            <View style={styles.warningNote}>
-              <Text style={styles.warningText}>Add at least {3 - images.length} more image{3 - images.length > 1 ? 's' : ''} (minimum 3 required)</Text>
+              <Text style={styles.noteText}>Listings with real photos get far more inquiries. If you add none, a generic placeholder photo is shown.</Text>
             </View>
           )}
         </View>
@@ -425,8 +467,28 @@ export default function AddPropertyScreen() {
           <Text style={styles.inputLabel}>Address *</Text>
           <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="Street address" placeholderTextColor={Colors.textLight} testID="property-address" />
 
-          <Text style={styles.inputLabel}>City *</Text>
-          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="e.g. New York" placeholderTextColor={Colors.textLight} testID="property-city" />
+          <Text style={styles.inputLabel}>Region / State</Text>
+          <TextInput style={styles.input} value={region} onChangeText={setRegion} placeholder="e.g. Greater Accra" placeholderTextColor={Colors.textLight} testID="property-region" />
+          {regionChoices.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.regionChips} keyboardShouldPersistTaps="handled">
+              {regionChoices.map(r => (
+                <Pressable
+                  key={r}
+                  style={[styles.regionChip, region === r && styles.regionChipActive]}
+                  onPress={() => setRegion(r)}
+                  testID={`property-region-${r.replace(/\s+/g, '-')}`}
+                >
+                  <Text style={[styles.regionChipText, region === r && styles.regionChipTextActive]}>{r}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          <Text style={styles.inputLabel}>Town / City *</Text>
+          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="e.g. Accra, Kumasi, Tema" placeholderTextColor={Colors.textLight} testID="property-city" />
+
+          <Text style={styles.inputLabel}>Neighbourhood / Area</Text>
+          <TextInput style={styles.input} value={neighborhood} onChangeText={setNeighborhood} placeholder="e.g. East Legon" placeholderTextColor={Colors.textLight} testID="property-neighborhood" />
         </View>
 
         <View style={styles.section}>
@@ -473,8 +535,12 @@ export default function AddPropertyScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
-        <Pressable style={[styles.submitBtn, loading && styles.submitBtnDisabled]} onPress={handleSubmit} disabled={loading} testID="submit-property">
-          {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.submitText}>List Property</Text>}
+        <Pressable style={[styles.submitBtn, (loading || photos.some(p => p.status === 'uploading')) && styles.submitBtnDisabled]} onPress={handleSubmit} disabled={loading} testID="submit-property">
+          {loading ? <ActivityIndicator color={Colors.white} /> : (
+            <Text style={styles.submitText}>
+              {photos.some(p => p.status === 'uploading') ? 'Uploading photos…' : 'List Property'}
+            </Text>
+          )}
         </Pressable>
       </SafeAreaView>
     </View>
@@ -494,6 +560,14 @@ const styles = StyleSheet.create({
   imageRow: { gap: 10, paddingVertical: 4 },
   imageThumb: { width: 110, height: 110, borderRadius: 14, overflow: 'hidden', position: 'relative' as const },
   thumbImage: { width: '100%', height: '100%' },
+  thumbOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  thumbError: { backgroundColor: 'rgba(185,28,28,0.65)' },
+  thumbOverlayText: { fontSize: 11, fontWeight: '700' as const, color: Colors.white },
+  regionChips: { gap: 8, paddingTop: 8 },
+  regionChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  regionChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  regionChipText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const },
+  regionChipTextActive: { color: Colors.white },
   removeImageBtn: { position: 'absolute' as const, top: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   coverBadge: { position: 'absolute' as const, bottom: 6, left: 6, backgroundColor: Colors.primary, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   coverBadgeText: { fontSize: 10, fontWeight: '700' as const, color: Colors.white },

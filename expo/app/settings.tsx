@@ -3,6 +3,7 @@ import { showAlert } from '@/lib/alert';
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, TextInput, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, ChevronRight, Bell, Lock, Globe, Trash2, Info, Shield, Moon, Eye, EyeOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -17,12 +18,13 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [showCurrent, setShowCurrent] = useState<boolean>(false);
   const [showNew, setShowNew] = useState<boolean>(false);
-  const [showPrivacy, setShowPrivacy] = useState<boolean>(false);
+  // Google accounts that never set a password create one without the current-password step.
+  const hasPassword = user?.passwordSet !== false;
 
   const userId = user?.id ?? '';
   const settingsQuery = trpc.auth.getSettings.useQuery(
-    { userId },
-    { enabled: !!userId, refetchInterval: 5000 }
+    {},
+    { enabled: !!userId }
   );
 
   const pushEnabled = settingsQuery.data?.pushEnabled ?? true;
@@ -60,12 +62,12 @@ export default function SettingsScreen() {
   }, [updateSettings]);
 
   const handleChangePassword = useCallback(async () => {
-    if (!currentPassword.trim()) {
+    if (hasPassword && !currentPassword) {
       showAlert('Error', 'Please enter your current password.');
       return;
     }
-    if (newPassword.length < 6) {
-      showAlert('Error', 'New password must be at least 6 characters.');
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      showAlert('Error', 'New password must be at least 8 characters and include a letter and a number.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -75,9 +77,9 @@ export default function SettingsScreen() {
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await changePassword({ currentPassword, newPassword });
+      await changePassword(hasPassword ? { currentPassword, newPassword } : { newPassword });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showAlert('Success', 'Your password has been updated.');
+      showAlert('Success', hasPassword ? 'Your password has been updated. Other devices were signed out.' : 'Password set. You can now also sign in with your email and password.');
       setShowPasswordForm(false);
       setCurrentPassword('');
       setNewPassword('');
@@ -87,7 +89,7 @@ export default function SettingsScreen() {
       const msg = e instanceof Error ? e.message : 'Failed to update password. Please try again.';
       showAlert('Error', msg);
     }
-  }, [currentPassword, newPassword, confirmPassword, changePassword]);
+  }, [hasPassword, currentPassword, newPassword, confirmPassword, changePassword]);
 
   const handleDeleteAccount = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -112,7 +114,7 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back">
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back">
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Settings</Text>
@@ -165,34 +167,49 @@ export default function SettingsScreen() {
           <Pressable style={styles.settingRow} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPasswordForm(!showPasswordForm); }}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Lock size={18} color={Colors.success} /></View>
-              <Text style={styles.settingLabel}>Change Password</Text>
+              <Text style={styles.settingLabel}>{hasPassword ? 'Change Password' : 'Set Password'}</Text>
             </View>
             <ChevronRight size={18} color={Colors.textLight} style={{ transform: [{ rotate: showPasswordForm ? '90deg' : '0deg' }] }} />
           </Pressable>
           {showPasswordForm && (
             <View style={styles.passwordForm}>
-              <View style={styles.passwordField}>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  placeholder="Current password"
-                  placeholderTextColor={Colors.textLight}
-                  secureTextEntry={!showCurrent}
-                  testID="current-password"
-                />
-                <Pressable onPress={() => setShowCurrent(!showCurrent)} style={styles.eyeBtn}>
-                  {showCurrent ? <EyeOff size={18} color={Colors.textSecondary} /> : <Eye size={18} color={Colors.textSecondary} />}
-                </Pressable>
-              </View>
+              {!hasPassword && (
+                <Text style={styles.settingDesc}>You signed up with Google. Set a password to also sign in with your email.</Text>
+              )}
+              {hasPassword && (
+                <View style={styles.passwordField}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={currentPassword}
+                    onChangeText={setCurrentPassword}
+                    placeholder="Current password"
+                    placeholderTextColor={Colors.textLight}
+                    secureTextEntry={!showCurrent}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    textContentType="password"
+                    autoComplete="current-password"
+                    testID="current-password"
+                  />
+                  <Pressable onPress={() => setShowCurrent(!showCurrent)} style={styles.eyeBtn}>
+                    {showCurrent ? <EyeOff size={18} color={Colors.textSecondary} /> : <Eye size={18} color={Colors.textSecondary} />}
+                  </Pressable>
+                </View>
+              )}
               <View style={styles.passwordField}>
                 <TextInput
                   style={styles.passwordInput}
                   value={newPassword}
                   onChangeText={setNewPassword}
-                  placeholder="New password (min 6 chars)"
+                  placeholder="New password (8+ chars, letters & numbers)"
                   placeholderTextColor={Colors.textLight}
                   secureTextEntry={!showNew}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  textContentType="newPassword"
+                  autoComplete="new-password"
                   testID="new-password"
                 />
                 <Pressable onPress={() => setShowNew(!showNew)} style={styles.eyeBtn}>
@@ -206,33 +223,32 @@ export default function SettingsScreen() {
                 placeholder="Confirm new password"
                 placeholderTextColor={Colors.textLight}
                 secureTextEntry={!showNew}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                textContentType="newPassword"
                 testID="confirm-password"
               />
               <Pressable style={styles.changePasswordBtn} onPress={handleChangePassword} disabled={changePasswordPending} testID="submit-password">
                 {changePasswordPending ? (
                   <ActivityIndicator color={Colors.white} size="small" />
                 ) : (
-                  <Text style={styles.changePasswordText}>Update Password</Text>
+                  <Text style={styles.changePasswordText}>{hasPassword ? 'Update Password' : 'Set Password'}</Text>
                 )}
               </Pressable>
             </View>
           )}
           <View style={styles.divider} />
-          <Pressable style={styles.settingRow} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPrivacy(!showPrivacy); }}>
+          <Pressable style={styles.settingRow} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/privacy'); }} testID="settings-privacy">
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}><Shield size={18} color={Colors.categoryOffice} /></View>
-              <Text style={styles.settingLabel}>Privacy Policy</Text>
+              <View>
+                <Text style={styles.settingLabel}>Privacy & Data</Text>
+                <Text style={styles.settingDesc}>What we collect, why, and for how long</Text>
+              </View>
             </View>
-            <ChevronRight size={18} color={Colors.textLight} style={{ transform: [{ rotate: showPrivacy ? '90deg' : '0deg' }] }} />
+            <ChevronRight size={18} color={Colors.textLight} />
           </Pressable>
-          {showPrivacy && (
-            <View style={styles.privacyContent}>
-              <Text style={styles.privacyTitle}>Perfect Space Privacy Policy</Text>
-              <Text style={styles.privacyText}>
-                {`1. Data Collection\nWe collect information you provide when creating an account, listing properties, and communicating with other users.\n\n2. Data Usage\nYour data is used to provide and improve our services, connect renters with property owners, and personalize your experience.\n\n3. Data Storage\nAll data is stored securely. We do not share your personal information with third parties without your consent.\n\n4. Your Rights\n• Access your personal data at any time\n• Request data deletion via account settings\n• Opt out of notifications\n• Update or correct your information\n\n5. Communication\nWe may send notifications about bookings, messages, and platform updates. You can manage these in notification settings.\n\n6. Contact Us\nFor privacy concerns, contact support@perfectspace.com`}
-              </Text>
-            </View>
-          )}
         </View>
 
         <Text style={styles.sectionTitle}>About</Text>
@@ -288,8 +304,5 @@ const styles = StyleSheet.create({
   eyeBtn: { paddingHorizontal: 12, paddingVertical: 10 },
   changePasswordBtn: { backgroundColor: Colors.primary, paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 4 },
   changePasswordText: { fontSize: 15, fontWeight: '600' as const, color: Colors.white },
-  privacyContent: { paddingHorizontal: 16, paddingBottom: 16 },
-  privacyTitle: { fontSize: 16, fontWeight: '700' as const, color: Colors.text, marginBottom: 10 },
-  privacyText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 22 },
   bottomSpacer: { height: 40 },
 });

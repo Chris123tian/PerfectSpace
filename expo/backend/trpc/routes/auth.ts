@@ -1,297 +1,448 @@
 import * as z from "zod";
-import { createTRPCRouter, publicProcedure } from "../create-context";
-import { store } from "../../store";
-import { UserRole, UserVerification } from "../../../types/property";
+import {
+  adminProcedure,
+  createTRPCRouter,
+  isStaff,
+  protectedProcedure,
+  publicProcedure,
+} from "../create-context";
+import { store, ADMINS_INBOX } from "../../store";
+import {
+  checkLock,
+  clearFailures,
+  hashPassword,
+  isHashed,
+  passwordPolicyError,
+  recordFailure,
+  safeEqual,
+  verifyPassword,
+} from "../../security";
+import {
+  audit,
+  createSession,
+  fail,
+  findUserIndex,
+  profileCard,
+  publicUser,
+  revokeSessions,
+} from "../helpers";
+import type { User, UserRole, UserVerification } from "../../../types/property";
 
-// Never send password hashes/secrets back to the client.
-function sanitizeUser<T extends { password?: string }>(user: T): Omit<T, "password"> {
-  if (!user) return user;
-  const { password: _password, ...safe } = user;
-  return safe as Omit<T, "password">;
+const DEFAULT_AVATAR =
+  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face";
+
+const email = z.string().trim().toLowerCase().email("Enter a valid email address").max(254);
+const shortText = (max: number) => z.string().trim().max(max);
+
+const memberSince = () =>
+  new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+// Fields a member may change on their own profile.
+const profileUpdates = z
+  .object({
+    name: shortText(80).min(2),
+    avatar: z.string().max(600),
+    phone: shortText(32),
+    bio: shortText(500),
+    dob: shortText(20),
+    country: shortText(80),
+    region: shortText(80),
+    whatsapp: shortText(32),
+  })
+  .partial(); // unknown keys (role, password, email…) are stripped
+
+/** Equalizes timing for unknown emails so accounts can't be enumerated. */
+const DUMMY_HASH =
+  "pbkdf2$100000$76Td+bUjkpU5LuZX+9Lm0A==$G2h+k7epc/HZ06RMdVDpctUWWlyvODVUulsBjMeYbP4=";
+
+async function fetchGoogleProfile(accessToken: string) {
+  const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) fail("UNAUTHORIZED", "Google sign-in could not be verified. Please try again.");
+  const info = (await res.json()) as {
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+    picture?: string;
+  };
+  if (!info.email || info.email_verified === false) {
+    fail("UNAUTHORIZED", "Your Google account email is not verified.");
+  }
+  return {
+    email: info.email.toLowerCase(),
+    name: info.name || info.email.split("@")[0],
+    picture: info.picture,
+  };
 }
 
 export const authRouter = createTRPCRouter({
   login: publicProcedure
-    .input(z.object({ email: z.string(), password: z.string() }))
-    .mutation(({ input }) => {
-      console.log("[Auth] Login attempt:", input.email);
-      const found = store.users.find(
-        (u) =>
-          u.email.toLowerCase() === input.email.toLowerCase() &&
-          u.password === input.password
-      );
-      if (!found) throw new Error("Invalid email or password");
-      if (!found.isActive)
-        throw new Error("Your account has been deactivated. Contact support.");
-      console.log("[Auth] Login success:", found.name, found.role);
-      return sanitizeUser(found);
+    .input(
+      z.object({
+        email: z.string().trim().toLowerCase().max(254),
+        password: z.string().max(256),
+        portal: z.enum(["app", "admin"]).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const portal = input.portal ?? "app";
+      const lockKeys = [`login:${input.email}`, `login-ip:${ctx.ip ?? "?"}`];
+      for (const key of lockKeys) {
+        const mins = checkLock(key);
+        if (mins) fail("TOO_MANY_REQUESTS", `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`);
+      }
+
+      const idx = store.users.findIndex((u) => u.email.toLowerCase() === input.email);
+      const found = idx === -1 ? null : store.users[idx];
+      const ok = await verifyPassword(input.password, found?.password ?? DUMMY_HASH);
+      if (!found || !ok) {
+        lockKeys.forEach(recordFailure);
+        audit(ctx, "login.failed", {
+          success: false,
+          actorEmail: input.email,
+          targetType: "user",
+          targetId: found?.id,
+          detail: found && !found.password ? "Google account without a password" : `portal=${portal}`,
+        });
+        if (found && !found.password) {
+          fail("UNAUTHORIZED", "This account uses Google sign-in. Continue with Google, then set a password in Settings.");
+        }
+        fail("UNAUTHORIZED", "Invalid email or password");
+      }
+      // Only the account counter resets on success; the IP counter keeps
+      // running so an attacker can't reset it by using their own account.
+      clearFailures(lockKeys[0]);
+
+      if (!found.isActive) {
+        audit({ ...ctx, user: found }, "login.blocked", { success: false, detail: "deactivated" });
+        fail("FORBIDDEN", "Your account has been deactivated. Contact support.");
+      }
+      if (portal === "app" && isStaff(found)) {
+        fail("FORBIDDEN", "This account must sign in through the staff portal.");
+      }
+      if (portal === "admin" && !isStaff(found)) {
+        audit({ ...ctx, user: found }, "portal.denied", { success: false });
+        fail("FORBIDDEN", "This portal is for staff accounts only.");
+      }
+
+      // Upgrade legacy plaintext passwords transparently.
+      if (!isHashed(found.password)) {
+        store.users[idx] = { ...found, password: await hashPassword(input.password), passwordSet: true };
+      }
+
+      const user = store.users[idx];
+      const token = await createSession(ctx, user, portal);
+      audit({ ...ctx, user }, "login", { targetType: "user", targetId: user.id, detail: `portal=${portal}` });
+      return { user: publicUser(user), token };
     }),
 
   signup: publicProcedure
     .input(
       z.object({
-        name: z.string(),
-        email: z.string(),
-        password: z.string(),
-        phone: z.string(),
-        role: z.enum(["renter", "landlord", "admin"]),
-        dob: z.string().optional(),
-        country: z.string().optional(),
-        region: z.string().optional(),
+        name: shortText(80).min(2, "Enter your full name"),
+        email,
+        password: z.string().max(128),
+        phone: shortText(32),
+        role: z.enum(["renter", "landlord", "admin", "superadmin"]),
+        dob: shortText(20).optional(),
+        country: shortText(80).optional(),
+        region: shortText(80).optional(),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Auth] Signup attempt:", input.email, input.role);
-      const exists = store.users.find(
-        (u) => u.email.toLowerCase() === input.email.toLowerCase()
-      );
-      if (exists) throw new Error("An account with this email already exists");
-
-      const role: UserRole = input.role === "admin" ? "renter" : input.role;
-      const newUser = {
+    .mutation(async ({ input, ctx }) => {
+      const policy = passwordPolicyError(input.password);
+      if (policy) fail("BAD_REQUEST", policy);
+      if (store.users.some((u) => u.email.toLowerCase() === input.email)) {
+        fail("CONFLICT", "An account with this email already exists");
+      }
+      // Staff roles can never be self-assigned.
+      const role: UserRole = input.role === "landlord" ? "landlord" : "renter";
+      const newUser: User = {
         id: store.generateId("u"),
         name: input.name,
         email: input.email,
-        password: input.password,
-        avatar:
-          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+        password: await hashPassword(input.password),
+        avatar: DEFAULT_AVATAR,
         phone: input.phone,
         role,
-        bio:
-          role === "landlord"
-            ? "Property owner on Perfect Space."
-            : "Looking for the perfect space.",
+        bio: role === "landlord" ? "Property owner on Perfect Space." : "Looking for the perfect space.",
         propertiesCount: 0,
         reviewsCount: 0,
         rating: 0,
-        memberSince: new Date().toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        }),
+        memberSince: memberSince(),
         verified: false,
         isActive: true,
         dob: input.dob,
         country: input.country,
         region: input.region,
+        authProvider: "password",
+        passwordSet: true,
+        createdAt: new Date().toISOString(),
       };
-
       store.users.push(newUser);
-      console.log("[Auth] Signup success:", newUser.name, "Total users:", store.users.length);
-      return sanitizeUser(newUser);
+      const token = await createSession(ctx, newUser, "app");
+      audit({ ...ctx, user: newUser }, "signup", { targetType: "user", targetId: newUser.id, detail: `role=${role}` });
+      return { user: publicUser(newUser), token };
     }),
 
   googleAuth: publicProcedure
     .input(
       z.object({
-        email: z.string(),
-        name: z.string(),
-        avatar: z.string().optional(),
+        accessToken: z.string().min(10).max(4096),
         role: z.enum(["renter", "landlord"]).optional(),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Auth] Google auth attempt:", input.email);
-      const existing = store.users.find(
-        (u) => u.email.toLowerCase() === input.email.toLowerCase()
-      );
+    .mutation(async ({ input, ctx }) => {
+      const google = await fetchGoogleProfile(input.accessToken);
+      const idx = store.users.findIndex((u) => u.email.toLowerCase() === google.email);
 
-      if (existing) {
-        if (!existing.isActive)
-          throw new Error("Your account has been deactivated. Contact support.");
-        console.log("[Auth] Google login existing user:", existing.name);
-        if (input.avatar && input.avatar !== existing.avatar) {
-          const idx = store.users.findIndex((u) => u.id === existing.id);
-          if (idx !== -1) {
-            store.users[idx] = { ...store.users[idx], avatar: input.avatar };
-          }
+      if (idx !== -1) {
+        const existing = store.users[idx];
+        if (!existing.isActive) fail("FORBIDDEN", "Your account has been deactivated. Contact support.");
+        if (isStaff(existing)) fail("FORBIDDEN", "This account must sign in through the staff portal.");
+        // Keep a custom (uploaded) avatar; only refresh stock/Google ones.
+        if (google.picture && !existing.avatar.includes("/api/images/")) {
+          store.users[idx] = { ...existing, avatar: google.picture };
         }
-        return sanitizeUser(existing);
+        const user = store.users[idx];
+        const token = await createSession(ctx, user, "app");
+        audit({ ...ctx, user }, "login", { targetType: "user", targetId: user.id, detail: "google" });
+        return { user: publicUser(user), token };
       }
 
       const role: UserRole = input.role ?? "renter";
-      const newUser = {
+      const newUser: User = {
         id: store.generateId("u"),
-        name: input.name,
-        email: input.email,
-        password: "google_oauth_" + Date.now().toString(36),
-        avatar:
-          input.avatar ||
-          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+        name: google.name,
+        email: google.email,
+        avatar: google.picture || DEFAULT_AVATAR,
         phone: "",
         role,
-        bio:
-          role === "landlord"
-            ? "Property owner on Perfect Space."
-            : "Looking for the perfect space.",
+        bio: role === "landlord" ? "Property owner on Perfect Space." : "Looking for the perfect space.",
         propertiesCount: 0,
         reviewsCount: 0,
         rating: 0,
-        memberSince: new Date().toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        }),
-        verified: true,
+        memberSince: memberSince(),
+        verified: false,
         isActive: true,
+        authProvider: "google",
+        passwordSet: false,
+        createdAt: new Date().toISOString(),
       };
-
       store.users.push(newUser);
-      console.log("[Auth] Google signup success:", newUser.name, "Total users:", store.users.length);
-      return sanitizeUser(newUser);
+      const token = await createSession(ctx, newUser, "app");
+      audit({ ...ctx, user: newUser }, "signup", { targetType: "user", targetId: newUser.id, detail: "google" });
+      return { user: publicUser(newUser), token };
     }),
 
-  getUser: publicProcedure
-    .input(z.object({ userId: z.string() }))
-    .query(({ input }) => {
-      const user = store.users.find((u) => u.id === input.userId);
-      return user ? sanitizeUser(user) : null;
-    }),
+  /** Current account for the presented session. */
+  me: protectedProcedure.query(({ ctx }) => publicUser(ctx.user)),
 
-  updateProfile: publicProcedure
-    .input(
-      z.object({
-        userId: z.string(),
-        updates: z.record(z.string(), z.unknown()),
-      })
-    )
-    .mutation(({ input }) => {
-      console.log("[Auth] Updating profile:", input.userId);
-      const idx = store.users.findIndex((u) => u.id === input.userId);
-      if (idx === -1) throw new Error("User not found");
-      store.users[idx] = {
-        ...store.users[idx],
-        ...(input.updates as Record<string, unknown>),
-        id: store.users[idx].id,
-        email: store.users[idx].email,
-      } as typeof store.users[0];
-      return sanitizeUser(store.users[idx]);
-    }),
-
-  getAllUsers: publicProcedure.query(() => {
-    return store.users.map(sanitizeUser);
+  logout: publicProcedure.mutation(({ ctx }) => {
+    if (ctx.session) {
+      const idx = store.sessions.findIndex((s) => s.id === ctx.session!.id);
+      if (idx !== -1) {
+        store.sessions[idx] = { ...store.sessions[idx], loggedOutAt: new Date().toISOString(), endReason: "logout" };
+      }
+      audit(ctx, "logout", { targetType: "session", targetId: ctx.session.id });
+    }
+    return { success: true };
   }),
 
-  updateUserAdmin: publicProcedure
-    .input(
-      z.object({
-        userId: z.string(),
-        updates: z.record(z.string(), z.unknown()),
-      })
-    )
-    .mutation(({ input }) => {
-      console.log("[Auth] Admin updating user:", input.userId);
-      const idx = store.users.findIndex((u) => u.id === input.userId);
-      if (idx === -1) throw new Error("User not found");
-      store.users[idx] = {
-        ...store.users[idx],
-        ...(input.updates as Record<string, unknown>),
-        id: input.userId,
-      } as typeof store.users[0];
-      return sanitizeUser(store.users[idx]);
+  /** Public profile card — no contact details or documents. */
+  getUser: publicProcedure
+    .input(z.object({ userId: z.string().max(64) }))
+    .query(({ input, ctx }) => {
+      const user = store.users.find((u) => u.id === input.userId);
+      if (!user) return null;
+      if (ctx.user && (ctx.user.id === user.id || isStaff(ctx.user))) return publicUser(user);
+      return profileCard(user);
     }),
 
-  changePassword: publicProcedure
+  updateProfile: protectedProcedure
+    .input(z.object({ userId: z.string().optional(), updates: profileUpdates }))
+    .mutation(({ input, ctx }) => {
+      const idx = findUserIndex(ctx.user.id);
+      const before = store.users[idx];
+      const updates = Object.fromEntries(
+        Object.entries(input.updates).filter(([, v]) => v !== undefined)
+      ) as typeof input.updates;
+      store.users[idx] = { ...before, ...updates };
+      const after = store.users[idx];
+
+      // Keep denormalized copies in sync.
+      if (updates.avatar !== undefined || updates.name !== undefined) {
+        for (let i = 0; i < store.properties.length; i++) {
+          const p = store.properties[i];
+          if (p.ownerId === after.id) {
+            store.properties[i] = { ...p, ownerAvatar: after.avatar, ownerName: after.name };
+          }
+        }
+      }
+      audit(ctx, "profile.update", {
+        targetType: "user",
+        targetId: after.id,
+        detail: `fields=${Object.keys(updates).join(",")}`,
+      });
+      return publicUser(after);
+    }),
+
+  getAllUsers: adminProcedure.query(() => store.users.map(publicUser)),
+
+  updateUserAdmin: adminProcedure
     .input(
       z.object({
-        userId: z.string(),
-        currentPassword: z.string(),
-        newPassword: z.string(),
+        userId: z.string().max(64),
+        updates: z
+          .object({
+            isActive: z.boolean(),
+            verified: z.boolean(),
+            role: z.enum(["renter", "landlord", "admin"]),
+          })
+          .partial(),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Auth] Password change for:", input.userId);
-      const idx = store.users.findIndex((u) => u.id === input.userId);
-      if (idx === -1) throw new Error("User not found");
-      const user = store.users[idx];
-      if ((user.password ?? "") !== input.currentPassword) {
-        throw new Error("Current password is incorrect");
+    .mutation(({ input, ctx }) => {
+      const idx = findUserIndex(input.userId);
+      const target = store.users[idx];
+      if (target.role === "superadmin") fail("FORBIDDEN", "The super admin account cannot be modified here.");
+      if (ctx.user.role !== "superadmin") {
+        if (isStaff(target)) fail("FORBIDDEN", "Only the super admin can modify staff accounts.");
+        if (input.updates.role !== undefined) fail("FORBIDDEN", "Only the super admin can change roles.");
       }
-      if (input.newPassword.length < 6) {
-        throw new Error("New password must be at least 6 characters");
+      if (target.id === ctx.user.id) fail("FORBIDDEN", "You cannot modify your own account here.");
+
+      const changes = Object.fromEntries(
+        Object.entries(input.updates).filter(([, v]) => v !== undefined)
+      ) as typeof input.updates;
+      store.users[idx] = { ...target, ...changes };
+      if (input.updates.isActive === false || input.updates.role !== undefined) {
+        revokeSessions(target.id); // takes effect immediately
       }
-      store.users[idx] = { ...user, password: input.newPassword };
+      audit(ctx, "admin.user.update", {
+        targetType: "user",
+        targetId: target.id,
+        detail: Object.entries(input.updates).map(([k, v]) => `${k}=${String(v)}`).join(", "),
+      });
+      return publicUser(store.users[idx]);
+    }),
+
+  deleteUser: adminProcedure
+    .input(z.object({ userId: z.string().max(64) }))
+    .mutation(({ input, ctx }) => {
+      const target = store.users[findUserIndex(input.userId)];
+      if (target.role === "superadmin" || target.id === ctx.user.id) fail("FORBIDDEN", "This account cannot be deleted.");
+      if (isStaff(target) && ctx.user.role !== "superadmin") fail("FORBIDDEN", "Only the super admin can delete staff accounts.");
+      deleteUserData(target.id);
+      audit(ctx, "admin.user.delete", { targetType: "user", targetId: target.id, detail: target.email });
       return { success: true };
     }),
 
-  submitVerification: publicProcedure
+  changePassword: protectedProcedure
     .input(
       z.object({
-        userId: z.string(),
-        documentType: z.string(),
-        documentName: z.string(),
-        documentNumber: z.string().optional(),
-        documentImage: z.string().optional(),
+        userId: z.string().optional(),
+        currentPassword: z.string().max(256).optional(),
+        newPassword: z.string().max(128),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Auth] Verification submitted by:", input.userId);
-      const idx = store.users.findIndex((u) => u.id === input.userId);
-      if (idx === -1) throw new Error("User not found");
+    .mutation(async ({ input, ctx }) => {
+      const idx = findUserIndex(ctx.user.id);
       const user = store.users[idx];
+      const lockKey = `pwchange:${user.id}`;
+      const mins = checkLock(lockKey);
+      if (mins) fail("TOO_MANY_REQUESTS", `Too many attempts. Try again in ${mins} minutes.`);
 
-      // Auto-approve when the name on the document matches the account name.
-      const normalized = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-      const nameMatches =
-        normalized(input.documentName) === normalized(user.name) &&
-        input.documentName.trim().length > 2;
-      const status = nameMatches ? "approved" : "pending";
+      // Google accounts without a password set their first one without a current password.
+      if (user.password) {
+        const ok = await verifyPassword(input.currentPassword ?? "", user.password);
+        if (!ok) {
+          recordFailure(lockKey);
+          audit(ctx, "password.change", { success: false, targetType: "user", targetId: user.id, detail: "wrong current password" });
+          fail("BAD_REQUEST", "Current password is incorrect");
+        }
+      }
+      clearFailures(lockKey);
+      const policy = passwordPolicyError(input.newPassword);
+      if (policy) fail("BAD_REQUEST", policy);
+      if (user.password && (await verifyPassword(input.newPassword, user.password))) {
+        fail("BAD_REQUEST", "New password must be different from the current one.");
+      }
 
-      const verification = {
-        status: status as "approved" | "pending",
+      store.users[idx] = { ...user, password: await hashPassword(input.newPassword), passwordSet: true };
+      revokeSessions(user.id, ctx.session.id); // sign out every other device
+      audit(ctx, user.password ? "password.change" : "password.set", { targetType: "user", targetId: user.id });
+      return { success: true, user: publicUser(store.users[idx]) };
+    }),
+
+  submitVerification: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().optional(),
+        documentType: shortText(60).min(2),
+        documentName: shortText(120).min(2),
+        documentNumber: shortText(60).optional(),
+        documentImage: z.string().url().max(600),
+      })
+    )
+    .mutation(({ input, ctx }) => {
+      if (ctx.user.role !== "landlord") fail("FORBIDDEN", "Identity verification is only required for landlords.");
+      const idx = findUserIndex(ctx.user.id);
+      const user = store.users[idx];
+      const documentUrl = new URL(input.documentImage);
+      const requestOrigin = new URL(ctx.req.url).origin;
+      const imageMatch = documentUrl.pathname.match(/^\/api\/images\/(img_[A-Za-z0-9_]+)$/);
+      const accessKey = documentUrl.searchParams.get("k");
+      const blob = imageMatch ? store.getBlob(imageMatch[1]) : null;
+      if (
+        documentUrl.origin !== requestOrigin ||
+        !blob ||
+        !blob.isPrivate ||
+        blob.ownerId !== user.id ||
+        !accessKey ||
+        !blob.accessKey ||
+        !safeEqual(accessKey, blob.accessKey)
+      ) {
+        fail("BAD_REQUEST", "Upload your identity document through the private document uploader.");
+      }
+      const now = new Date().toISOString();
+      const verification: UserVerification = {
+        status: "pending",
         documentType: input.documentType,
         documentName: input.documentName,
         documentNumber: input.documentNumber,
         documentImage: input.documentImage,
-        submittedAt: new Date().toISOString(),
-        reviewedAt: nameMatches ? new Date().toISOString() : undefined,
+        submittedAt: now,
       };
+      store.users[idx] = { ...user, verification, verified: false };
 
-      store.users[idx] = {
-        ...user,
-        verification,
-        verified: nameMatches ? true : user.verified,
-      };
-
-      if (!nameMatches) {
-        store.notifications.unshift({
-          id: store.generateId("n"),
-          userId: "admin1",
-          title: "Verification Request",
-          message: `${user.name} submitted a ${input.documentType} for verification.`,
-          type: "system",
-          read: false,
-          createdAt: new Date().toISOString(),
-          data: { userId: user.id },
-        });
-      }
-
-      return store.users[idx];
+      store.notifications.unshift({
+        id: store.generateId("n"),
+        userId: ADMINS_INBOX,
+        title: "Verification Request",
+        message: `${user.name} submitted a ${input.documentType} for review.`,
+        type: "verification",
+        read: false,
+        createdAt: now,
+        data: { userId: user.id },
+      });
+      audit(ctx, "verification.submit", { targetType: "user", targetId: user.id, detail: verification.status });
+      return publicUser(store.users[idx]);
     }),
 
-  reviewVerification: publicProcedure
-    .input(
-      z.object({
-        userId: z.string(),
-        approve: z.boolean(),
-        reason: z.string().optional(),
-      })
-    )
-    .mutation(({ input }) => {
-      console.log("[Auth] Verification review for:", input.userId, input.approve);
-      const idx = store.users.findIndex((u) => u.id === input.userId);
-      if (idx === -1) throw new Error("User not found");
+  reviewVerification: adminProcedure
+    .input(z.object({ userId: z.string().max(64), approve: z.boolean(), reason: shortText(300).optional() }))
+    .mutation(({ input, ctx }) => {
+      const idx = findUserIndex(input.userId);
       const user = store.users[idx];
-      const verification = {
+      const verification: UserVerification = {
         ...(user.verification ?? { status: "pending" }),
-        status: (input.approve ? "approved" : "rejected") as "approved" | "rejected" | "pending",
+        status: input.approve ? "approved" : "rejected",
         reviewedAt: new Date().toISOString(),
         rejectionReason: input.approve ? undefined : input.reason,
-      } as UserVerification;
-      store.users[idx] = {
-        ...user,
-        verification,
-        verified: input.approve ? true : false,
       };
-
+      store.users[idx] = { ...user, verification, verified: input.approve };
       store.notifications.unshift({
         id: store.generateId("n"),
         userId: input.userId,
@@ -299,28 +450,28 @@ export const authRouter = createTRPCRouter({
         message: input.approve
           ? "Your identity document was approved. You are now a verified member!"
           : `Your verification was not approved.${input.reason ? ` Reason: ${input.reason}` : ""} You can resubmit with a clearer document.`,
-        type: "system",
+        type: "verification",
         read: false,
         createdAt: new Date().toISOString(),
       });
-
-      return store.users[idx];
+      audit(ctx, input.approve ? "verification.approve" : "verification.reject", {
+        targetType: "user",
+        targetId: user.id,
+        detail: input.reason,
+      });
+      return publicUser(store.users[idx]);
     }),
 
-  getSettings: publicProcedure
-    .input(z.object({ userId: z.string() }))
-    .query(({ input }) => {
-      return store.userSettings[input.userId] ?? {
-        pushEnabled: true,
-        emailEnabled: true,
-        darkMode: false,
-      };
+  getSettings: protectedProcedure
+    .input(z.object({ userId: z.string().optional() }).optional())
+    .query(({ ctx }) => {
+      return store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, darkMode: false };
     }),
 
-  updateSettings: publicProcedure
+  updateSettings: protectedProcedure
     .input(
       z.object({
-        userId: z.string(),
+        userId: z.string().optional(),
         settings: z.object({
           pushEnabled: z.boolean().optional(),
           emailEnabled: z.boolean().optional(),
@@ -328,35 +479,33 @@ export const authRouter = createTRPCRouter({
         }),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Auth] Updating settings for:", input.userId);
-      const existing = store.userSettings[input.userId] ?? {
-        pushEnabled: true,
-        emailEnabled: true,
-        darkMode: false,
-      };
-      store.userSettings[input.userId] = {
-        ...existing,
-        ...input.settings,
-      };
-      return store.userSettings[input.userId];
+    .mutation(({ input, ctx }) => {
+      const existing = store.userSettings[ctx.user.id] ?? { pushEnabled: true, emailEnabled: true, darkMode: false };
+      store.userSettings[ctx.user.id] = { ...existing, ...input.settings };
+      return store.userSettings[ctx.user.id];
     }),
 
-  deleteAccount: publicProcedure
-    .input(z.object({ userId: z.string() }))
-    .mutation(({ input }) => {
-      console.log("[Auth] Deleting account:", input.userId);
-      store.users = store.users.filter((u) => u.id !== input.userId);
-      store.properties = store.properties.filter((p) => p.ownerId !== input.userId);
-      store.conversations = store.conversations.filter(
-        (c) => !c.participantIds.includes(input.userId)
-      );
-      store.bookings = store.bookings.filter(
-        (b) => b.renterId !== input.userId && b.ownerId !== input.userId
-      );
-      store.notifications = store.notifications.filter((n) => n.userId !== input.userId);
-      delete store.savedProperties[input.userId];
-      delete store.userSettings[input.userId];
+  deleteAccount: protectedProcedure
+    .input(z.object({ userId: z.string().optional() }).optional())
+    .mutation(({ ctx }) => {
+      if (ctx.user.role === "superadmin") fail("FORBIDDEN", "The super admin account cannot be deleted.");
+      deleteUserData(ctx.user.id);
+      audit(ctx, "account.delete", { targetType: "user", targetId: ctx.user.id, detail: ctx.user.email });
       return { success: true };
     }),
 });
+
+function deleteUserData(userId: string) {
+  store.users = store.users.filter((u) => u.id !== userId);
+  store.properties = store.properties.filter((p) => p.ownerId !== userId);
+  const convIds = new Set(
+    store.conversations.filter((c) => c.participantIds.includes(userId)).map((c) => c.id)
+  );
+  store.conversations = store.conversations.filter((c) => !convIds.has(c.id));
+  store.chatMessages = store.chatMessages.filter((m) => !convIds.has(m.conversationId));
+  store.bookings = store.bookings.filter((b) => b.renterId !== userId && b.ownerId !== userId);
+  store.notifications = store.notifications.filter((n) => n.userId !== userId);
+  revokeSessions(userId);
+  delete store.savedProperties[userId];
+  delete store.userSettings[userId];
+}

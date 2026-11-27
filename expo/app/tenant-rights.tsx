@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, ChevronDown, ChevronUp, Shield, FileText, Scale, Home, AlertTriangle, Phone } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
@@ -62,7 +63,7 @@ export default function TenantRightsScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back">
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back">
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Tenant Rights Guide</Text>

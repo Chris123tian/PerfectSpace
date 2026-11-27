@@ -13,17 +13,19 @@ import {
   useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
-import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin, LogIn } from 'lucide-react-native';
+import { Search, SlidersHorizontal, Building2, Home, Hotel, DoorOpen, ChevronRight, Plus, ConciergeBell, Star, MapPin, LogIn, RotateCw, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { useFilters } from '@/contexts/FilterContext';
-import { findCountry } from '@/lib/countries';
+import { applySearchFilters, matchesSearch } from '@/lib/applyFilters';
 import { PropertyType } from '@/types/property';
 import PropertyCard from '@/components/PropertyCard';
 
@@ -43,8 +45,19 @@ const CARD_GAP = 16;
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { activeProperties } = useData();
-  const { filters } = useFilters();
+  const { activeProperties, refetchAll } = useData();
+  const { filters, applyFilters } = useFilters();
+  const [pullRefreshing, setPullRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = useCallback(async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPullRefreshing(true);
+    try {
+      await refetchAll();
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [refetchAll]);
   const { width: winWidth } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<PropertyType | 'all'>('all');
@@ -73,37 +86,8 @@ export default function HomeScreen() {
     if (selectedCategory !== 'all') {
       result = result.filter(p => p.type === selectedCategory);
     }
-    if (filters.listingType) {
-      result = result.filter(p => p.listingType === filters.listingType);
-    }
-    if (filters.types.length > 0) {
-      result = result.filter(p => filters.types.includes(p.type));
-    }
-    if (filters.country) {
-      result = result.filter(p => (p.country ?? '').toLowerCase() === filters.country!.toLowerCase());
-    }
-    if (filters.bedrooms !== null && filters.bedrooms > 0) {
-      result = result.filter(p => p.bedrooms >= filters.bedrooms!);
-    }
-    if (filters.minPrice !== null || filters.maxPrice !== null) {
-      const country = filters.country ? findCountry(filters.country) : undefined;
-      const symbol = country?.symbol;
-      result = result.filter(p => {
-        if (symbol && p.currency !== symbol) return false;
-        if (filters.minPrice !== null && p.price < filters.minPrice) return false;
-        if (filters.maxPrice !== null && p.price > filters.maxPrice) return false;
-        return true;
-      });
-    }
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        p =>
-          p.title.toLowerCase().includes(query) ||
-          p.city.toLowerCase().includes(query) ||
-          p.address.toLowerCase().includes(query)
-      );
-    }
+    result = applySearchFilters(result, filters);
+    if (searchQuery.trim()) result = result.filter(p => matchesSearch(p, searchQuery));
     return result;
   }, [selectedCategory, searchQuery, activeProperties, filters]);
 
@@ -178,6 +162,17 @@ export default function HomeScreen() {
                 <Text style={styles.greeting}>{greeting}, {user?.name?.split(' ')[0] ?? 'there'}</Text>
                 <Text style={styles.greetingBold}>Perfect Space</Text>
               </View>
+              <Pressable
+                style={styles.refreshButton}
+                onPress={handleRefresh}
+                disabled={pullRefreshing}
+                accessibilityLabel="Refresh listings"
+                testID="refresh-button"
+              >
+                {pullRefreshing
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <RotateCw size={18} color={Colors.primary} />}
+              </Pressable>
             </View>
 
             <View style={styles.searchRow}>
@@ -197,6 +192,31 @@ export default function HomeScreen() {
                 <SlidersHorizontal size={20} color={Colors.white} />
               </Pressable>
             </View>
+            {(filters.country || filters.region || filters.town) ? (
+              <View style={styles.locationChips}>
+                {[
+                  { key: 'country' as const, label: filters.country },
+                  { key: 'region' as const, label: filters.region },
+                  { key: 'town' as const, label: filters.town },
+                ].filter(c => !!c.label).map(c => (
+                  <Pressable
+                    key={c.key}
+                    style={styles.locationChip}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      if (c.key === 'country') applyFilters({ ...filters, country: null, region: null, town: null, currency: null });
+                      else if (c.key === 'region') applyFilters({ ...filters, region: null, town: null });
+                      else applyFilters({ ...filters, town: null });
+                    }}
+                    testID={`active-filter-${c.key}`}
+                  >
+                    <MapPin size={12} color={Colors.primary} />
+                    <Text style={styles.locationChipText}>{c.label}</Text>
+                    <X size={12} color={Colors.primary} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </View>
         </Animated.View>
       </SafeAreaView>
@@ -209,6 +229,9 @@ export default function HomeScreen() {
         )}
         scrollEventThrottle={16}
         style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={pullRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />
+        }
       >
         <View style={[styles.pageInner, { width: isWide ? contentWidth : '100%' }]}>
         {!user && (
@@ -418,6 +441,10 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.background, borderRadius: 14, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 8, gap: 8 },
   searchInput: { flex: 1, fontSize: 15, color: Colors.text },
+  refreshButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  locationChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  locationChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primaryLight, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16 },
+  locationChipText: { fontSize: 13, fontWeight: '600' as const, color: Colors.primary },
   filterButton: { backgroundColor: Colors.primary, width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   scrollView: { flex: 1 },
   loginBanner: {

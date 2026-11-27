@@ -116,7 +116,6 @@ struct LoginView: View {
             divider
             googleButton
             signupRow
-            adminHint
         }
         .padding(.horizontal, 24)
         .padding(.top, 32)
@@ -156,14 +155,6 @@ struct LoginView: View {
             Button("Sign Up") { showSignup = true }
                 .font(.subheadline).fontWeight(.bold).foregroundStyle(Theme.primary)
         }
-    }
-
-    private var adminHint: some View {
-        Text("Admin login: admin@perfectspace.com / admin123")
-            .font(.caption).foregroundStyle(Theme.primary)
-            .padding(.vertical, 10).padding(.horizontal, 16)
-            .background(Theme.primaryLight)
-            .clipShape(.rect(cornerRadius: 10))
     }
 
     private func handleLogin() {

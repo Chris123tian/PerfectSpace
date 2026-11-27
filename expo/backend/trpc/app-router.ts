@@ -5,6 +5,7 @@ import { conversationsRouter } from "./routes/conversations";
 import { bookingsRouter } from "./routes/bookings";
 import { notificationsRouter } from "./routes/notifications";
 import { reviewsRouter } from "./routes/reviews";
+import { superadminRouter } from "./routes/superadmin";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   bookings: bookingsRouter,
   notifications: notificationsRouter,
   reviews: reviewsRouter,
+  superadmin: superadminRouter,
 });
 
 export type AppRouter = typeof appRouter;

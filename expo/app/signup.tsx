@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Redirect } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Home, Building2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
@@ -64,18 +65,9 @@ export default function SignupScreen() {
 
   const handleGoogleResponse = useCallback(async (accessToken: string) => {
     try {
-      console.log('[Signup] Fetching Google user info...');
-      const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const userInfo = await userInfoRes.json();
-      console.log('[Signup] Google user info:', userInfo.email, userInfo.name);
-
       await googleAuth({
-        email: userInfo.email,
-        name: userInfo.name ?? 'Google User',
-        avatar: userInfo.picture,
-        role: role === 'renter' || role === 'landlord' ? role : 'renter',
+        accessToken,
+        role: role === 'landlord' ? 'landlord' : 'renter',
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
@@ -120,7 +112,8 @@ export default function SignupScreen() {
     if (!email.trim()) e.email = 'Email is required';
     else if (!email.includes('@')) e.email = 'Enter a valid email';
     if (!password) e.password = 'Password is required';
-    else if (password.length < 6) e.password = 'Minimum 6 characters';
+    else if (password.length < 8) e.password = 'Use at least 8 characters';
+    else if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) e.password = 'Include at least one letter and one number';
     if (!phone.trim()) e.phone = 'Phone is required';
     if (dob.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(dob.trim())) e.dob = 'Use the format YYYY-MM-DD';
     setErrors(e);
@@ -187,7 +180,7 @@ export default function SignupScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
-              <Pressable onPress={() => router.back()} style={styles.backButton} testID="back-button">
+              <Pressable onPress={() => goBack()} style={styles.backButton} testID="back-button">
                 <ArrowLeft size={24} color={Colors.white} />
               </Pressable>
               <Text style={styles.headerTitle}>Create Account</Text>
@@ -358,12 +351,16 @@ export default function SignupScreen() {
                 <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
                   <TextInput
                     style={styles.passwordInput}
-                    placeholder="Min 6 characters"
+                    placeholder="8+ characters, letters & numbers"
                     placeholderTextColor={Colors.textLight}
                     value={password}
                     onChangeText={(t) => { setPassword(t); setErrors(e => ({ ...e, password: '' })); }}
                     secureTextEntry={!showPassword}
                     autoComplete="new-password"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    textContentType="newPassword"
                     testID="signup-password"
                   />
                   <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
@@ -372,6 +369,14 @@ export default function SignupScreen() {
                 </View>
                 {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
               </View>
+
+              <Text style={styles.consentText}>
+                By creating an account you agree to how we collect and use your data, described in our{' '}
+                <Text style={styles.consentLink} onPress={() => router.push('/privacy')} testID="signup-privacy">
+                  Privacy & Data Policy
+                </Text>
+                .
+              </Text>
 
               <Pressable
                 style={[styles.signupButton, signupPending && styles.signupButtonDisabled]}
@@ -414,6 +419,17 @@ const styles = StyleSheet.create({
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(16,42,67,0.6)',
+  },
+  consentText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Colors.textSecondary,
+    marginBottom: 14,
+  },
+  consentLink: {
+    color: Colors.primary,
+    fontWeight: '700' as const,
+    textDecorationLine: 'underline' as const,
   },
   keyboardView: {
     flex: 1,

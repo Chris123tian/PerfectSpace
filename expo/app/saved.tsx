@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { ArrowLeft, Heart } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useData } from '@/contexts/DataContext';
@@ -19,7 +20,7 @@ export default function SavedScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} testID="back">
+          <Pressable onPress={() => goBack()} style={styles.backBtn} testID="back">
             <ArrowLeft size={22} color={Colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Saved Properties</Text>

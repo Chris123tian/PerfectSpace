@@ -1,54 +1,48 @@
 import * as z from "zod";
-import { createTRPCRouter, publicProcedure } from "../create-context";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../create-context";
 import { store } from "../../store";
-import { Review } from "../../../types/property";
+import { audit, fail } from "../helpers";
+import type { Review } from "../../../types/property";
 
 export const reviewsRouter = createTRPCRouter({
-  list: publicProcedure.query(() => {
-    return store.reviews;
-  }),
+  list: publicProcedure.query(() => store.reviews),
 
-  add: publicProcedure
+  add: protectedProcedure
     .input(
       z.object({
-        propertyId: z.string(),
-        userId: z.string(),
-        userName: z.string(),
-        userAvatar: z.string(),
-        rating: z.number(),
-        comment: z.string(),
+        propertyId: z.string().max(64),
+        rating: z.number().int().min(1).max(5),
+        comment: z.string().trim().min(1).max(2000),
+        userId: z.string().optional(),
+        userName: z.string().optional(),
+        userAvatar: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
-      console.log("[Reviews] Adding review for:", input.propertyId);
+    .mutation(({ input, ctx }) => {
+      const propIdx = store.properties.findIndex((p) => p.id === input.propertyId);
+      if (propIdx === -1) fail("NOT_FOUND", "Property not found");
+      if (store.properties[propIdx].ownerId === ctx.user.id) fail("BAD_REQUEST", "You can't review your own property.");
+
       const newReview: Review = {
         id: store.generateId("r"),
         propertyId: input.propertyId,
-        userId: input.userId,
-        userName: input.userName,
-        userAvatar: input.userAvatar,
+        userId: ctx.user.id,
+        userName: ctx.user.name,
+        userAvatar: ctx.user.avatar,
         rating: input.rating,
         comment: input.comment,
         date: new Date().toISOString().split("T")[0],
       };
-
       store.reviews.unshift(newReview);
 
-      const propIdx = store.properties.findIndex(
-        (p) => p.id === input.propertyId
-      );
-      if (propIdx !== -1) {
-        const propReviews = store.reviews.filter(
-          (r) => r.propertyId === input.propertyId
-        );
-        const avgRating =
-          propReviews.reduce((sum, r) => sum + r.rating, 0) /
-          propReviews.length;
-        store.properties[propIdx].rating =
-          Math.round(avgRating * 10) / 10;
-        store.properties[propIdx].reviewCount = propReviews.length;
-      }
-
+      const propReviews = store.reviews.filter((r) => r.propertyId === input.propertyId);
+      const avg = propReviews.reduce((sum, r) => sum + r.rating, 0) / propReviews.length;
+      store.properties[propIdx] = {
+        ...store.properties[propIdx],
+        rating: Math.round(avg * 10) / 10,
+        reviewCount: propReviews.length,
+      };
+      audit(ctx, "review.add", { targetType: "review", targetId: newReview.id, detail: `property=${input.propertyId}` });
       return newReview;
     }),
 });

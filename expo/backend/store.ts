@@ -8,15 +8,102 @@ import {
   Booking,
   AppNotification,
   Review,
+  Session,
+  AuditEntry,
 } from "../types/property";
 import { seedProperties } from "./seed";
+import { hashPassword, isHashed, passwordPolicyError, randomToken } from "./security";
+
+// These hashes identify credentials shipped by the previous seed. They are
+// never accepted as credentials after the bootstrap migration.
+const LEGACY_ADMIN_PASSWORD_HASH =
+  "pbkdf2$100000$76Td+bUjkpU5LuZX+9Lm0A==$G2h+k7epc/HZ06RMdVDpctUWWlyvODVUulsBjMeYbP4=";
+const LEGACY_SUPERADMIN_PASSWORD_HASH =
+  "pbkdf2$100000$zrl4kXLcKAiAFBl0gDj2rw==$vwX463f+Nc+YDuDl6oMKXkSwwBoDfm1+C9Gv67qnglE=";
+
+export const SUPERADMIN_ID = "superadmin1";
+export const ADMIN_ID = "admin1";
+/** Pseudo-recipient for notifications every staff member should see. */
+export const ADMINS_INBOX = "admins";
+
+export interface BootstrapCredentials {
+  adminPassword?: string;
+  superAdminPassword?: string;
+}
+
+function credentialsFromEnvironment(): BootstrapCredentials {
+  if (typeof process === "undefined") return {};
+  return {
+    adminPassword: process.env.PS_BOOTSTRAP_ADMIN_PASSWORD,
+    superAdminPassword: process.env.PS_BOOTSTRAP_SUPERADMIN_PASSWORD,
+  };
+}
+
+function validateBootstrapCredentials(credentials: BootstrapCredentials): void {
+  for (const password of [credentials.adminPassword, credentials.superAdminPassword]) {
+    if (password && passwordPolicyError(password)) {
+      throw new Error("Bootstrap passwords must be at least 8 characters and contain a letter and a number.");
+    }
+  }
+}
+
+let bootstrapCredentials = credentialsFromEnvironment();
+validateBootstrapCredentials(bootstrapCredentials);
+
+export function configureBootstrapCredentials(credentials: BootstrapCredentials): void {
+  validateBootstrapCredentials(credentials);
+  bootstrapCredentials = credentials;
+}
+
+const superAdminSeed: User = {
+  id: SUPERADMIN_ID,
+  name: "Super Admin",
+  email: "superadmin@perfectspace.com",
+  password: undefined,
+  avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face",
+  phone: "",
+  role: "superadmin",
+  bio: "Platform owner with full oversight of Perfect Space.",
+  propertiesCount: 0,
+  reviewsCount: 0,
+  rating: 5,
+  memberSince: "Nov 2026",
+  verified: true,
+  isActive: false,
+  authProvider: "password",
+  passwordSet: false,
+};
+
+const US_CITY_STATE: Record<string, string> = {
+  "new york": "New York",
+  "san francisco": "California",
+  "los angeles": "California",
+  austin: "Texas",
+  boston: "Massachusetts",
+  chicago: "Illinois",
+  miami: "Florida",
+  denver: "Colorado",
+  seattle: "Washington",
+  portland: "Oregon",
+};
+
+export interface StoredBlob {
+  id: string;
+  mime: string;
+  data: Uint8Array;
+  ownerId: string;
+  isPrivate: boolean;
+  /** Capability key required to read a private blob (ID documents). */
+  accessKey?: string;
+  createdAt: string;
+}
 
 const seedUsers: User[] = [
   {
-    id: "admin1",
+    id: ADMIN_ID,
     name: "Admin Panel",
     email: "admin@perfectspace.com",
-    password: "admin123",
+    password: undefined,
     avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
     phone: "+1 (555) 000-0000",
     role: "admin",
@@ -26,8 +113,11 @@ const seedUsers: User[] = [
     rating: 5,
     memberSince: "Jan 2024",
     verified: true,
-    isActive: true,
+    isActive: false,
+    authProvider: "password",
+    passwordSet: false,
   },
+  superAdminSeed,
 ];
 
 const seedConversations: Conversation[] = [];
@@ -58,6 +148,10 @@ export interface PersistenceAdapter {
   load(): Partial<PersistedData> | null;
   /** Durably store the snapshot. Synchronous when the backend allows it. */
   save(data: PersistedData): void;
+  /** Binary storage for uploaded images (kept out of the JSON snapshot). */
+  putBlob?(blob: StoredBlob): void;
+  getBlob?(id: string): StoredBlob | null;
+  deleteBlob?(id: string): void;
 }
 
 let persistenceAdapter: PersistenceAdapter | null = null;
@@ -100,7 +194,12 @@ export type PersistedData = {
   reviews: Review[];
   savedProperties: Record<string, string[]>;
   userSettings: Record<string, UserSettings>;
+  sessions: Session[];
+  auditLog: AuditEntry[];
 };
+
+const MAX_AUDIT = 3000;
+const MAX_SESSIONS = 3000;
 
 function loadPersisted(): Partial<PersistedData> {
   try {
@@ -170,6 +269,10 @@ class Store {
   private _userSettings = tracked<Record<string, UserSettings>>({}, () =>
     this.markDirty()
   );
+  private _sessions = tracked<Session[]>([], () => this.markDirty());
+  private _auditLog = tracked<AuditEntry[]>([], () => this.markDirty());
+  private memoryBlobs = new Map<string, StoredBlob>();
+  private migration: Promise<void> | null = null;
 
   private idCounter = Date.now();
 
@@ -184,6 +287,7 @@ class Store {
    * adapter is installed.
    */
   reloadFrom(saved: Partial<PersistedData> | null) {
+    this.migration = null; // re-run migrations against the new data
     if (!saved) return;
     if (saved.users?.length) this.users = saved.users;
     if (saved.properties?.length) {
@@ -202,6 +306,151 @@ class Store {
     if (saved.savedProperties)
       this.savedProperties = saved.savedProperties;
     if (saved.userSettings) this.userSettings = saved.userSettings;
+    if (saved.sessions) this.sessions = saved.sessions;
+    if (saved.auditLog) this.auditLog = saved.auditLog;
+  }
+
+  /**
+   * One-time, idempotent data migrations. Async because password hashing uses
+   * WebCrypto; awaited before every request is handled (see createContext).
+   */
+  ensureMigrated(): Promise<void> {
+    if (!this.migration) {
+      this.migration = this.migrate().catch((e) => {
+        console.error("[Store] Migration failed:", e);
+        this.migration = null;
+      });
+    }
+    return this.migration;
+  }
+
+  private async migrate() {
+    // Staff seed accounts are inert until their deployment-time passwords are
+    // configured. Legacy seed credentials are revoked during this migration.
+    if (!this.users.some((u) => u.id === SUPERADMIN_ID)) {
+      this.users.push({ ...superAdminSeed });
+      console.log("[Store] Seeded super admin account");
+    }
+
+    // Hash ordinary legacy passwords and bootstrap the seeded staff accounts.
+    for (let i = 0; i < this.users.length; i++) {
+      const u = this.users[i];
+      const patch: Partial<User> = {};
+      const isAdminSeed = u.id === ADMIN_ID;
+      const isSuperAdminSeed = u.id === SUPERADMIN_ID;
+      const bootstrapPassword = isAdminSeed
+        ? bootstrapCredentials.adminPassword
+        : isSuperAdminSeed
+          ? bootstrapCredentials.superAdminPassword
+          : undefined;
+      const isLegacySeedCredential =
+        (isAdminSeed && u.password === LEGACY_ADMIN_PASSWORD_HASH) ||
+        (isSuperAdminSeed && u.password === LEGACY_SUPERADMIN_PASSWORD_HASH);
+
+      if ((isAdminSeed || isSuperAdminSeed) && (!u.passwordSet || isLegacySeedCredential)) {
+        if (bootstrapPassword) {
+          patch.password = await hashPassword(bootstrapPassword);
+          patch.passwordSet = true;
+          patch.isActive = true;
+          patch.authProvider = "password";
+        } else {
+          patch.password = undefined;
+          patch.passwordSet = false;
+          patch.isActive = false;
+        }
+      } else if (u.password && u.password.startsWith("google_oauth_")) {
+        patch.password = undefined;
+        patch.authProvider = "google";
+        patch.passwordSet = false;
+      } else if (u.password && !isHashed(u.password)) {
+        patch.password = await hashPassword(u.password);
+        patch.passwordSet = true;
+        if (!u.authProvider) patch.authProvider = "password";
+      } else {
+        if (!u.authProvider) patch.authProvider = u.password ? "password" : "google";
+        if (u.passwordSet === undefined) patch.passwordSet = !!u.password;
+      }
+      if (Object.keys(patch).length) this.users[i] = { ...this.users[i], ...patch };
+    }
+
+    // 3. Admin notifications go to the shared staff inbox.
+    for (let i = 0; i < this.notifications.length; i++) {
+      if (this.notifications[i].userId === "admin1") {
+        this.notifications[i] = { ...this.notifications[i], userId: ADMINS_INBOX };
+      }
+    }
+
+    // 4. Region backfill for US listings created before regions existed.
+    for (let i = 0; i < this.properties.length; i++) {
+      const p = this.properties[i];
+      if (!p.region && (p.country ?? "United States") === "United States") {
+        const state = US_CITY_STATE[p.city.trim().toLowerCase()];
+        if (state) this.properties[i] = { ...p, region: state };
+      }
+    }
+
+    // 5. Expire stale sessions.
+    this.pruneSessions();
+  }
+
+  pruneSessions() {
+    const now = Date.now();
+    let changed = false;
+    const next = this.sessions.map((s) => {
+      if (!s.loggedOutAt && Date.parse(s.expiresAt) < now) {
+        changed = true;
+        return { ...s, loggedOutAt: s.expiresAt, endReason: "expired" as const };
+      }
+      return s;
+    });
+    if (next.length > MAX_SESSIONS) {
+      // Drop the oldest ended sessions first.
+      next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      next.length = MAX_SESSIONS;
+      changed = true;
+    }
+    if (changed) this.sessions = next;
+  }
+
+  audit(entry: Omit<AuditEntry, "id" | "at">) {
+    this.auditLog.unshift({
+      id: `a_${Date.now().toString(36)}${randomToken(4)}`,
+      at: new Date().toISOString(),
+      ...entry,
+    });
+    if (this.auditLog.length > MAX_AUDIT) this.auditLog.length = MAX_AUDIT;
+  }
+
+  // ── Blob storage (uploaded images) ───────────────────────────────────────
+  putBlob(blob: StoredBlob) {
+    if (persistenceAdapter?.putBlob) return persistenceAdapter.putBlob(blob);
+    this.memoryBlobs.set(blob.id, blob);
+    try {
+      const dir = path.join(DATA_DIR, "blobs");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, blob.id), blob.data);
+      fs.writeFileSync(
+        path.join(dir, blob.id + ".json"),
+        JSON.stringify({ ...blob, data: undefined })
+      );
+    } catch {
+      // in-memory only
+    }
+  }
+
+  getBlob(id: string): StoredBlob | null {
+    if (!/^[a-zA-Z0-9_]+$/.test(id)) return null;
+    if (persistenceAdapter?.getBlob) return persistenceAdapter.getBlob(id);
+    const cached = this.memoryBlobs.get(id);
+    if (cached) return cached;
+    try {
+      const dir = path.join(DATA_DIR, "blobs");
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, id + ".json"), "utf8"));
+      const data = new Uint8Array(fs.readFileSync(path.join(dir, id)));
+      return { ...meta, data } as StoredBlob;
+    } catch {
+      return null;
+    }
   }
 
   get users() {
@@ -276,6 +525,22 @@ class Store {
     this.markDirty();
   }
 
+  get sessions() {
+    return this._sessions;
+  }
+  set sessions(v: Session[]) {
+    this._sessions = tracked(v, () => this.markDirty());
+    this.markDirty();
+  }
+
+  get auditLog() {
+    return this._auditLog;
+  }
+  set auditLog(v: AuditEntry[]) {
+    this._auditLog = tracked(v, () => this.markDirty());
+    this.markDirty();
+  }
+
   generateId(prefix: string): string {
     // Collision-proof: never rely on the in-memory counter alone — the DO can
     // restart with persisted rows created by an older counter, and a fresh
@@ -308,6 +573,8 @@ class Store {
       reviews: this.reviews,
       savedProperties: this.savedProperties,
       userSettings: this.userSettings,
+      sessions: this.sessions,
+      auditLog: this.auditLog,
     };
     if (persistenceAdapter) {
       try {

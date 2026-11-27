@@ -3,6 +3,13 @@ import { createTRPCReact } from "@trpc/react-query";
 import superjson from "superjson";
 
 import type { AppRouter } from "@/backend/trpc/app-router";
+import { getSessionToken } from "@/lib/session";
+
+/** Attach the session token to every API call. */
+const authHeaders = (): Record<string, string> => {
+  const token = getSessionToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -35,6 +42,7 @@ export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
         httpLink({
           url: `${getBaseUrl()}/api/trpc`,
           transformer: superjson,
+          headers: authHeaders,
         }),
       ],
     });
@@ -50,6 +58,7 @@ export const trpcClient = trpc.createClient({
     httpLink({
       url: `${getBaseUrl()}/api/trpc`,
       transformer: superjson,
+      headers: authHeaders,
     }),
   ],
 });

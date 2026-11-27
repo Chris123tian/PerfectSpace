@@ -6,36 +6,44 @@ import { useAuth } from './AuthContext';
 import { trpc } from '@/lib/trpc';
 
 export const [DataProvider, useData] = createContextHook(() => {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
+  // Private data is fetched only once we know who is asking.
+  const signedIn = !authLoading && !!user;
+  const userKey = user?.id ?? 'guest';
 
   // Mutations invalidate the relevant queries, so lists stay fresh without
   // aggressive polling — critical for keeping the backend fast under load.
   const propertiesQuery = trpc.properties.list.useQuery(undefined, {
+    enabled: !authLoading,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
   });
 
   const conversationsQuery = trpc.conversations.list.useQuery(undefined, {
+    enabled: signedIn,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
   });
 
   const messagesQuery = trpc.conversations.allMessages.useQuery(undefined, {
+    enabled: signedIn,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
   });
 
   const bookingsQuery = trpc.bookings.list.useQuery(undefined, {
+    enabled: signedIn,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
   });
 
   const notificationsQuery = trpc.notifications.list.useQuery(undefined, {
+    enabled: signedIn,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
@@ -47,11 +55,10 @@ export const [DataProvider, useData] = createContextHook(() => {
     staleTime: 30000,
   });
 
-  const userId = user?.id;
   const savedQuery = trpc.properties.getSaved.useQuery(
-    { userId: userId ?? '' },
+    { userId: userKey },
     {
-      enabled: !!userId,
+      enabled: signedIn,
       refetchInterval: 30000,
       refetchOnWindowFocus: true,
     }
@@ -65,11 +72,8 @@ export const [DataProvider, useData] = createContextHook(() => {
   const reviews = useMemo(() => (reviewsQuery.data ?? []) as Review[], [reviewsQuery.data]);
   const savedPropertyIds = useMemo(() => (savedQuery.data ?? []) as string[], [savedQuery.data]);
 
-  const userNotifications = useMemo(() => {
-    if (!user) return [];
-    if (user.role === 'admin') return notifications;
-    return notifications.filter(n => n.userId === user.id);
-  }, [notifications, user]);
+  // The server already scopes notifications (staff also get the shared inbox).
+  const userNotifications = useMemo(() => (user ? notifications : []), [notifications, user]);
 
   const unreadNotificationCount = useMemo(
     () => userNotifications.filter(n => !n.read).length,
@@ -81,9 +85,14 @@ export const [DataProvider, useData] = createContextHook(() => {
     return conversations.filter(c => c.participantIds.includes(user.id));
   }, [conversations, user]);
 
+  /** Support chats from every member — visible to staff only (server-scoped). */
+  const supportConversations = useMemo(
+    () => conversations.filter(c => c.propertyId === 'support'),
+    [conversations]
+  );
+
   const userBookings = useMemo(() => {
     if (!user) return [];
-    if (user.role === 'admin') return bookings;
     return bookings.filter(b => b.renterId === user.id || b.ownerId === user.id);
   }, [bookings, user]);
 
@@ -194,12 +203,32 @@ export const [DataProvider, useData] = createContextHook(() => {
     },
   });
 
+  const deleteNotificationMutation = trpc.notifications.delete.useMutation({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+    },
+  });
+
+  const clearNotificationsMutation = trpc.notifications.clearAll.useMutation({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [['notifications', 'list']] });
+    },
+  });
+
   const addProperty = useCallback(async (property: Property) => {
-    return addPropertyMutation.mutateAsync({ property: property as unknown });
+    return addPropertyMutation.mutateAsync({ property });
   }, [addPropertyMutation]);
 
   const updateProperty = useCallback(async ({ id, updates }: { id: string; updates: Partial<Property> }) => {
-    return updatePropertyMutation.mutateAsync({ id, updates: updates as Record<string, unknown> });
+    const { title, description, type, listingType, price, currency, period, durationUnit, minNights, country,
+      contactEmail, contactWhatsApp, bookingChannel, bedrooms, bathrooms, area, address, city, region,
+      neighborhood, latitude, longitude, images, amenities, status, featured } = updates;
+    const clean = Object.fromEntries(Object.entries({
+      title, description, type, listingType, price, currency, period, durationUnit, minNights, country,
+      contactEmail, contactWhatsApp, bookingChannel, bedrooms, bathrooms, area, address, city, region,
+      neighborhood, latitude, longitude, images, amenities, status, featured,
+    }).filter(([, v]) => v !== undefined));
+    return updatePropertyMutation.mutateAsync({ id, updates: clean });
   }, [updatePropertyMutation]);
 
   const approveProperty = useCallback(async (id: string) => {
@@ -216,12 +245,12 @@ export const [DataProvider, useData] = createContextHook(() => {
 
   const toggleSave = useCallback(async (propertyId: string) => {
     if (!user) throw new Error('Not authenticated');
-    return toggleSaveMutation.mutateAsync({ userId: user.id, propertyId });
+    return toggleSaveMutation.mutateAsync({ propertyId });
   }, [user, toggleSaveMutation]);
 
   const sendMessage = useCallback(async ({ conversationId, text }: { conversationId: string; text: string }) => {
     if (!user) throw new Error('Not authenticated');
-    return sendMessageMutation.mutateAsync({ conversationId, senderId: user.id, text });
+    return sendMessageMutation.mutateAsync({ conversationId, text });
   }, [user, sendMessageMutation]);
 
   const startConversation = useCallback(async ({ otherUserId, otherUserName, otherUserAvatar, propertyId, propertyTitle, propertyImage, initialMessage }: {
@@ -235,9 +264,6 @@ export const [DataProvider, useData] = createContextHook(() => {
   }) => {
     if (!user) throw new Error('Not authenticated');
     return startConversationMutation.mutateAsync({
-      userId: user.id,
-      userName: user.name,
-      userAvatar: user.avatar,
       otherUserId,
       otherUserName,
       otherUserAvatar,
@@ -254,33 +280,21 @@ export const [DataProvider, useData] = createContextHook(() => {
   const markReadMutate = markConversationReadMutation.mutate;
   const markConversationRead = useCallback((conversationId: string) => {
     if (!user) return;
-    markReadMutate({ conversationId, userId: user.id });
+    markReadMutate({ conversationId });
   }, [user?.id, markReadMutate]);
 
   const createBooking = useCallback(async (booking: Booking) => {
-    return createBookingMutation.mutateAsync({ booking: booking as unknown });
+    return createBookingMutation.mutateAsync({ booking });
   }, [createBookingMutation]);
 
   const updateBooking = useCallback(async ({ id, status }: { id: string; status: BookingStatus }) => {
     if (!user) throw new Error('Not authenticated');
-    return updateBookingMutation.mutateAsync({
-      id,
-      status,
-      currentUserId: user.id,
-      currentUserRole: user.role,
-    });
+    return updateBookingMutation.mutateAsync({ id, status });
   }, [user, updateBookingMutation]);
 
   const addReview = useCallback(async ({ propertyId, rating, comment }: { propertyId: string; rating: number; comment: string }) => {
     if (!user) throw new Error('Not authenticated');
-    return addReviewMutation.mutateAsync({
-      propertyId,
-      userId: user.id,
-      userName: user.name,
-      userAvatar: user.avatar,
-      rating,
-      comment,
-    });
+    return addReviewMutation.mutateAsync({ propertyId, rating, comment });
   }, [user, addReviewMutation]);
 
   const markNotificationRead = useCallback((id: string) => {
@@ -289,8 +303,27 @@ export const [DataProvider, useData] = createContextHook(() => {
 
   const markAllNotificationsRead = useCallback(() => {
     if (!user) return;
-    markAllNotificationsReadMutation.mutate({ userId: user.id, role: user.role });
+    markAllNotificationsReadMutation.mutate();
   }, [user, markAllNotificationsReadMutation]);
+
+  const deleteNotification = useCallback(async (id: string) => {
+    return deleteNotificationMutation.mutateAsync({ id });
+  }, [deleteNotificationMutation]);
+
+  const clearNotifications = useCallback(async () => {
+    return clearNotificationsMutation.mutateAsync();
+  }, [clearNotificationsMutation]);
+
+  /** Pull-to-refresh / manual refresh: refetch everything this screen shows. */
+  const refetchAll = useCallback(async () => {
+    await Promise.all([
+      propertiesQuery.refetch(),
+      reviewsQuery.refetch(),
+      ...(signedIn
+        ? [conversationsQuery.refetch(), messagesQuery.refetch(), bookingsQuery.refetch(), notificationsQuery.refetch(), savedQuery.refetch()]
+        : []),
+    ]);
+  }, [signedIn, propertiesQuery, reviewsQuery, conversationsQuery, messagesQuery, bookingsQuery, notificationsQuery, savedQuery]);
 
   const getConversationMessages = useCallback((conversationId: string): ChatMessage[] => {
     return chatMessages.filter(m => m.conversationId === conversationId);
@@ -316,6 +349,7 @@ export const [DataProvider, useData] = createContextHook(() => {
     deleteProperty,
     conversations: userConversations,
     allConversations: conversations,
+    supportConversations,
     getConversationMessages,
     sendMessage,
     startConversation,
@@ -329,6 +363,10 @@ export const [DataProvider, useData] = createContextHook(() => {
     unreadNotificationCount,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    clearNotifications,
+    refetchAll,
+    isRefreshing: propertiesQuery.isRefetching,
     reviews,
     getPropertyReviews,
     addReview,
@@ -339,9 +377,10 @@ export const [DataProvider, useData] = createContextHook(() => {
   }), [
     properties, activeProperties, pendingProperties, myProperties,
     approveProperty, rejectProperty, addProperty, updateProperty, deleteProperty,
-    userConversations, conversations, getConversationMessages, sendMessage, startConversation, markConversationRead,
+    userConversations, conversations, supportConversations, getConversationMessages, sendMessage, startConversation, markConversationRead,
     userBookings, bookings, createBooking, updateBooking,
     userNotifications, notifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    deleteNotification, clearNotifications, refetchAll, propertiesQuery.isRefetching,
     reviews, getPropertyReviews, addReview, savedPropertyIds, toggleSave, isSaved, propertiesQuery.isLoading,
   ]);
 });

@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SafeImage from '@/components/SafeImage';
 import { useLocalSearchParams, router } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import {
   ArrowLeft, Heart, Share2, Star, MapPin, Bed, Bath, Maximize, MessageCircle, Calendar, Check, Send, X, Video, Globe2, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Images as ImagesIcon, Mail, ShieldAlert,
 } from 'lucide-react-native';
@@ -39,7 +40,7 @@ export default function PropertyDetailScreen() {
   const propertyReviews = useMemo(() => getPropertyReviews(id ?? ''), [getPropertyReviews, id]);
   const saved = useMemo(() => isSaved(id ?? ''), [isSaved, id]);
 
-  const handleBack = useCallback(() => router.back(), []);
+  const handleBack = useCallback(() => goBack(), []);
 
   const openGallery = useCallback((index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
